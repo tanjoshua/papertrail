@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { assignCategoryAction } from "@/app/actions";
 import { getMonthDetailData } from "@/lib/expenses";
-import { formatCurrency, formatMonthLabel, getReadableTextColor, percentage } from "@/lib/format";
+import { formatCurrency, formatMonthLabel, formatTransactionCurrency, getReadableTextColor, percentage } from "@/lib/format";
 import {
   EmptyState,
   MessageBanner,
@@ -83,7 +83,7 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
         <SummaryCard
           eyebrow="Spend"
           value={formatCurrency(data.summary.spendCents)}
-          description={`Net movement ${formatCurrency(data.summary.netCents)} after ${formatCurrency(data.summary.refundCents)} in refunds and ${formatCurrency(data.summary.depositCents)} in deposits.`}
+          description={`Net movement ${formatCurrency(data.summary.netCents)} after ${formatCurrency(data.summary.refundCents)} in refunds, ${formatCurrency(data.summary.depositCents)} in deposits, and ${formatCurrency(data.summary.transferCents)} in transfers.`}
         />
         <SummaryCard
           eyebrow="Coverage"
@@ -95,12 +95,12 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
           }
         />
         <SummaryCard
-          eyebrow="Excluded inflows"
-          value={formatCurrency(data.summary.paymentCents + data.summary.depositCents)}
+          eyebrow="Excluded activity"
+          value={formatCurrency(data.summary.paymentCents + data.summary.depositCents + data.summary.transferCents)}
           description={
-            data.summary.paymentCents + data.summary.depositCents > 0
-              ? `${formatCurrency(data.summary.depositCents)} deposits / ${formatCurrency(data.summary.paymentCents)} card payments.`
-              : "No excluded inflow rows were detected in this month."
+            data.summary.paymentCents + data.summary.depositCents + data.summary.transferCents > 0
+              ? `${formatCurrency(data.summary.depositCents)} deposits / ${formatCurrency(data.summary.paymentCents)} card payments / ${formatCurrency(data.summary.transferCents)} transfers.`
+              : "No excluded activity rows were detected in this month."
           }
         />
         <SummaryCard
@@ -186,10 +186,12 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                       <p className="font-semibold text-foreground">{formatCurrency(account.monthSpendCents)}</p>
                       <p className={workspaceSectionCopyClassName}>
                         {account.monthPaymentCents > 0
-                          ? `Payments ${formatCurrency(account.monthPaymentCents)} / Deposits ${formatCurrency(account.monthDepositCents)} / Net ${formatCurrency(account.monthNetCents)}`
+                          ? `Payments ${formatCurrency(account.monthPaymentCents)} / Deposits ${formatCurrency(account.monthDepositCents)} / Transfers ${formatCurrency(account.monthTransferCents)} / Net ${formatCurrency(account.monthNetCents)}`
                           : account.monthDepositCents > 0
-                            ? `Deposits ${formatCurrency(account.monthDepositCents)} / Net ${formatCurrency(account.monthNetCents)}`
-                          : `Net ${formatCurrency(account.monthNetCents)}`}
+                            ? `Deposits ${formatCurrency(account.monthDepositCents)} / Transfers ${formatCurrency(account.monthTransferCents)} / Net ${formatCurrency(account.monthNetCents)}`
+                            : account.monthTransferCents > 0
+                              ? `Transfers ${formatCurrency(account.monthTransferCents)} / Net ${formatCurrency(account.monthNetCents)}`
+                              : `Net ${formatCurrency(account.monthNetCents)}`}
                       </p>
                     </div>
                   </div>
@@ -235,7 +237,9 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                           </div>
 
                           <div className="flex w-full flex-wrap items-center justify-between gap-4 lg:w-auto">
-                            <p className={workspaceStatTextClassName}>{formatCurrency(item.amountCents)}</p>
+                            <p className={workspaceStatTextClassName}>
+                              {formatTransactionCurrency(item.amountCents, item.transactionKind)}
+                            </p>
 
                             {item.categoryId ? (
                               <span
@@ -249,7 +253,7 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                               >
                                 {item.categoryName}
                               </span>
-                            ) : item.transactionKind === "payment" || item.transactionKind === "deposit" ? (
+                            ) : item.transactionKind === "payment" || item.transactionKind === "deposit" || item.transactionKind === "transfer" ? (
                               <div className="flex flex-col gap-1 text-right">
                                 <TransactionKindBadge kind={item.transactionKind} />
                                 <p className={workspaceSectionCopyClassName}>Excluded from spend and category review.</p>
@@ -345,6 +349,7 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                         {statement.monthTransactionCount} row{statement.monthTransactionCount === 1 ? "" : "s"} in this month
                         {statement.monthPaymentCents > 0 ? ` / Payments ${formatCurrency(statement.monthPaymentCents)}` : ""}
                         {statement.monthDepositCents > 0 ? ` / Deposits ${formatCurrency(statement.monthDepositCents)}` : ""}
+                        {statement.monthTransferCents > 0 ? ` / Transfers ${formatCurrency(statement.monthTransferCents)}` : ""}
                       </p>
                     </div>
                   </div>

@@ -175,6 +175,11 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
                   {formatCurrency(data.focusStatement.depositCents)} in deposits was recognized automatically and kept out of spend and review.
                 </p>
               ) : null}
+              {data.focusStatement.transferCents > 0 ? (
+                <p className={workspaceSectionCopyClassName}>
+                  {formatCurrency(data.focusStatement.transferCents)} in transfers was recognized automatically and kept out of spend and review.
+                </p>
+              ) : null}
               <div className={workspaceHeaderActionsClassName}>
                 {data.focusStatement.monthsTouched[0] ? (
                   <Link href={`/months/${data.focusStatement.monthsTouched[0]}`} className={buttonLinkClassName()}>

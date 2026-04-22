@@ -65,7 +65,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           value={latestMonth ? formatMonthLabel(latestMonth.month) : "No data yet"}
           description={
             latestMonth
-              ? `${formatCurrency(latestMonth.spendCents)} in spend across ${latestMonth.statementCount} statement${latestMonth.statementCount === 1 ? "" : "s"}${latestMonth.paymentCents + latestMonth.depositCents > 0 ? `, with ${formatCurrency(latestMonth.paymentCents + latestMonth.depositCents)} in excluded inflows` : ""}`
+              ? `${formatCurrency(latestMonth.spendCents)} in spend across ${latestMonth.statementCount} statement${latestMonth.statementCount === 1 ? "" : "s"}${latestMonth.paymentCents + latestMonth.depositCents + latestMonth.transferCents > 0 ? `, with ${formatCurrency(latestMonth.paymentCents + latestMonth.depositCents + latestMonth.transferCents)} in excluded activity` : ""}`
               : "Import a CSV or spreadsheet statement to create your first month page."
           }
         />

@@ -20,3 +20,11 @@ export const DEFAULT_CATEGORIES: CategorySeed[] = [
   { id: "income", name: "Income", color: "#2d6a4f", sortOrder: 12 },
   { id: "other", name: "Other", color: "#7a6c5d", sortOrder: 13 },
 ];
+
+export const CATEGORY_COLOR_CHOICES = DEFAULT_CATEGORIES.map((category) => category.color);
+
+export function getRandomCategoryColor() {
+  const index = Math.floor(Math.random() * CATEGORY_COLOR_CHOICES.length);
+
+  return CATEGORY_COLOR_CHOICES[index] ?? "#607744";
+}

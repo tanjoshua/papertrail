@@ -5,6 +5,14 @@ export function formatCurrency(cents: number, currency = "SGD") {
   }).format(cents / 100);
 }
 
+export function formatTransactionCurrency(cents: number, kind: "deposit" | "expense" | "payment" | "refund" | "transfer") {
+  if (kind === "deposit") {
+    return `+${formatCurrency(Math.abs(cents))}`;
+  }
+
+  return formatCurrency(cents);
+}
+
 export function formatMonthLabel(month: string) {
   const [year, numericMonth] = month.split("-").map(Number);
 

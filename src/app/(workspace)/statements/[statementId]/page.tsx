@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { assignCategoryAction } from "@/app/actions";
 import { getStatementDetailData } from "@/lib/expenses";
-import { formatCurrency, formatMonthLabel, getReadableTextColor } from "@/lib/format";
+import { formatCurrency, formatMonthLabel, formatTransactionCurrency, getReadableTextColor } from "@/lib/format";
 import {
   EmptyState,
   MessageBanner,
@@ -101,12 +101,12 @@ export default async function StatementPage({ params, searchParams }: StatementP
         <SummaryCard
           eyebrow="Spend"
           value={formatCurrency(statement.spendCents)}
-          description={`Net movement ${formatCurrency(statement.netCents)} after ${formatCurrency(statement.refundCents)} in refunds and ${formatCurrency(statement.depositCents)} in deposits.`}
+          description={`Net movement ${formatCurrency(statement.netCents)} after ${formatCurrency(statement.refundCents)} in refunds, ${formatCurrency(statement.depositCents)} in deposits, and ${formatCurrency(statement.transferCents)} in transfers.`}
         />
         <SummaryCard
-          eyebrow="Excluded inflows"
-          value={formatCurrency(statement.paymentCents + statement.depositCents)}
-          description={`${formatCurrency(statement.depositCents)} deposits / ${formatCurrency(statement.paymentCents)} card payments.`}
+          eyebrow="Excluded activity"
+          value={formatCurrency(statement.paymentCents + statement.depositCents + statement.transferCents)}
+          description={`${formatCurrency(statement.depositCents)} deposits / ${formatCurrency(statement.paymentCents)} card payments / ${formatCurrency(statement.transferCents)} transfers.`}
         />
         <SummaryCard
           eyebrow="Needs review"
@@ -164,7 +164,7 @@ export default async function StatementPage({ params, searchParams }: StatementP
                       >
                         {item.categoryName}
                       </Badge>
-                    ) : item.transactionKind === "payment" || item.transactionKind === "deposit" ? (
+                    ) : item.transactionKind === "payment" || item.transactionKind === "deposit" || item.transactionKind === "transfer" ? (
                       <Badge variant="secondary">Not applicable</Badge>
                     ) : (
                       <form action={assignCategoryAction}>
@@ -205,7 +205,9 @@ export default async function StatementPage({ params, searchParams }: StatementP
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <span className={workspaceStatTextClassName}>{formatCurrency(item.amountCents)}</span>
+                    <span className={workspaceStatTextClassName}>
+                      {formatTransactionCurrency(item.amountCents, item.transactionKind)}
+                    </span>
                   </TableCell>
                 </TableRow>
               ))}

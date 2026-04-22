@@ -20,6 +20,7 @@ import {
   workspacePageStackClassName,
   workspaceSectionCopyClassName,
 } from "@/app/(workspace)/_components/workspace-ui";
+import { getRandomCategoryColor } from "@/lib/categories";
 import { getCategoryManagementData } from "@/lib/expenses";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -35,6 +36,7 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
   const resolvedSearchParams = (await searchParams) ?? {};
   const message = typeof resolvedSearchParams.message === "string" ? resolvedSearchParams.message : undefined;
   const data = getCategoryManagementData();
+  const newCategoryColor = getRandomCategoryColor();
 
   return (
     <div className={workspacePageStackClassName}>
@@ -95,10 +97,11 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
             <Field className="grid gap-2">
               <FieldLabel htmlFor="new-category-color">Color</FieldLabel>
               <Input
+                key={newCategoryColor}
                 id="new-category-color"
                 type="color"
                 name="color"
-                defaultValue="#607744"
+                defaultValue={newCategoryColor}
                 className="h-12 w-20 p-1"
                 required
               />

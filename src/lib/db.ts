@@ -123,7 +123,8 @@ function ensureTransactionKindColumn(connection: BetterSqliteDatabase) {
           amount_cents AS amountCents,
           transaction_kind AS transactionKind,
           category_id AS categoryId,
-          category_source AS categorySource
+          category_source AS categorySource,
+          raw_row_json AS rawRowJson
         FROM transactions
       `,
     )
@@ -132,6 +133,7 @@ function ensureTransactionKindColumn(connection: BetterSqliteDatabase) {
     categoryId: string | null;
     categorySource: string;
     id: string;
+    rawRowJson: string | null;
     rawDescription: string;
     transactionKind: string | null;
   }>;
@@ -155,16 +157,23 @@ function ensureTransactionKindColumn(connection: BetterSqliteDatabase) {
 
   connection.transaction((rowsToNormalize: typeof rows) => {
     for (const row of rowsToNormalize) {
-      const nextKind = inferTransactionKind(row.rawDescription, row.amountCents);
+      const hasKnownKind =
+        row.transactionKind !== null &&
+        TRANSACTION_KINDS.includes(row.transactionKind as (typeof TRANSACTION_KINDS)[number]);
+      const isImportedDeposit = row.rawRowJson?.includes('"isDeposit":true') ?? false;
+      const nextKind = isImportedDeposit
+        ? "deposit"
+        : hasKnownKind && !(row.transactionKind === "expense" && row.amountCents < 0)
+          ? row.transactionKind as (typeof TRANSACTION_KINDS)[number]
+          : inferTransactionKind(row.rawDescription, row.amountCents);
       const nextAmountCents = normalizeTransactionAmount(nextKind, row.amountCents);
-      const nextCategoryId = nextKind === "payment" || nextKind === "deposit" ? null : row.categoryId;
-      const nextCategorySource = nextKind === "payment" || nextKind === "deposit" ? "not_applicable" : row.categorySource;
-      const needsKindNormalization =
-        row.transactionKind === null || !TRANSACTION_KINDS.includes(row.transactionKind as (typeof TRANSACTION_KINDS)[number]);
+      const isNonReviewableKind = nextKind === "payment" || nextKind === "deposit" || nextKind === "transfer";
+      const nextCategoryId = isNonReviewableKind ? null : row.categoryId;
+      const nextCategorySource = isNonReviewableKind ? "not_applicable" : row.categorySource;
+      const needsKindNormalization = !hasKnownKind;
       const needsAmountNormalization = nextAmountCents !== row.amountCents;
       const needsPaymentCleanup =
-        (nextKind === "payment" || nextKind === "deposit") &&
-        (row.categoryId !== null || row.categorySource !== "not_applicable");
+        isNonReviewableKind && (row.categoryId !== null || row.categorySource !== "not_applicable");
       const needsKindUpdate = needsKindNormalization || row.transactionKind !== nextKind;
 
       if (!needsKindUpdate && !needsAmountNormalization && !needsPaymentCleanup) {

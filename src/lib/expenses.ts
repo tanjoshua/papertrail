@@ -30,6 +30,7 @@ export type StatementSummary = {
   spendCents: number;
   status: string;
   transactionCount: number;
+  transferCents: number;
 };
 
 export type MonthCard = {
@@ -46,6 +47,7 @@ export type MonthCard = {
   statementCount: number;
   topCategoryName: string | null;
   transactionCount: number;
+  transferCents: number;
 };
 
 export type ReviewGroup = {
@@ -118,6 +120,7 @@ export type MonthDetailData = {
     monthPaymentCents: number;
     monthRefundCents: number;
     monthSpendCents: number;
+    monthTransferCents: number;
     pendingCount: number;
     reviewableTransactionCount: number;
     statementCount: number;
@@ -142,6 +145,7 @@ export type MonthDetailData = {
       monthPaymentCents: number;
       monthRefundCents: number;
       monthSpendCents: number;
+      monthTransferCents: number;
       monthTransactionCount: number;
     }
   >;
@@ -158,6 +162,7 @@ export type MonthDetailData = {
     statementCount: number;
     topCategoryName: string | null;
     transactionCount: number;
+    transferCents: number;
   };
   timeline: Array<{
     date: string;
@@ -449,6 +454,7 @@ function getStatementSummaries(limit?: number) {
       COALESCE(SUM(CASE WHEN t.transaction_kind = 'refund' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS refundCents,
       COALESCE(SUM(CASE WHEN t.transaction_kind = 'payment' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS paymentCents,
       COALESCE(SUM(CASE WHEN t.transaction_kind = 'deposit' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS depositCents,
+      COALESCE(SUM(CASE WHEN t.transaction_kind = 'transfer' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS transferCents,
       COALESCE(SUM(t.amount_cents), 0) AS netCents,
       COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') THEN 1 ELSE 0 END), 0) AS reviewableTransactionCount,
       COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') AND t.category_id IS NULL THEN 1 ELSE 0 END), 0) AS pendingCount,
@@ -737,6 +743,7 @@ export function getOverviewData(): OverviewData {
           COALESCE(SUM(CASE WHEN t.transaction_kind = 'refund' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS refundCents,
           COALESCE(SUM(CASE WHEN t.transaction_kind = 'payment' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS paymentCents,
           COALESCE(SUM(CASE WHEN t.transaction_kind = 'deposit' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS depositCents,
+          COALESCE(SUM(CASE WHEN t.transaction_kind = 'transfer' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS transferCents,
           COALESCE(SUM(t.amount_cents), 0) AS netCents,
           COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') AND t.category_id IS NULL THEN 1 ELSE 0 END), 0) AS pendingCount,
           COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') AND t.category_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS categorizedCount,
@@ -848,6 +855,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
     statementCount: 0,
     topCategoryName: null as string | null,
     transactionCount: transactions.length,
+    transferCents: 0,
   };
 
   const categoryBreakdownMap = new Map<
@@ -866,6 +874,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
       monthPaymentCents: number;
       monthRefundCents: number;
       monthSpendCents: number;
+      monthTransferCents: number;
       monthTransactionCount: number;
     }
   >();
@@ -888,6 +897,10 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
 
     if (transaction.transactionKind === "deposit" && transaction.amountCents < 0) {
       summary.depositCents += Math.abs(transaction.amountCents);
+    }
+
+    if (transaction.transactionKind === "transfer" && transaction.amountCents < 0) {
+      summary.transferCents += Math.abs(transaction.amountCents);
     }
 
     if (isCategorizableTransactionKind(transaction.transactionKind)) {
@@ -929,6 +942,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
       monthPaymentCents: 0,
       monthRefundCents: 0,
       monthSpendCents: 0,
+      monthTransferCents: 0,
       pendingCount: 0,
       reviewableTransactionCount: 0,
       statementCount: 0,
@@ -956,6 +970,10 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
       account.monthDepositCents += Math.abs(transaction.amountCents);
     }
 
+    if (transaction.transactionKind === "transfer" && transaction.amountCents < 0) {
+      account.monthTransferCents += Math.abs(transaction.amountCents);
+    }
+
     if (isCategorizableTransactionKind(transaction.transactionKind)) {
       account.reviewableTransactionCount += 1;
 
@@ -974,6 +992,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
       monthPaymentCents: 0,
       monthRefundCents: 0,
       monthSpendCents: 0,
+      monthTransferCents: 0,
       monthTransactionCount: 0,
     };
 
@@ -993,6 +1012,10 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
 
     if (transaction.transactionKind === "deposit" && transaction.amountCents < 0) {
       statementContribution.monthDepositCents += Math.abs(transaction.amountCents);
+    }
+
+    if (transaction.transactionKind === "transfer" && transaction.amountCents < 0) {
+      statementContribution.monthTransferCents += Math.abs(transaction.amountCents);
     }
 
     statementContribution.monthTransactionCount += 1;

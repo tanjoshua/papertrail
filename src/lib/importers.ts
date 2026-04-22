@@ -1252,6 +1252,7 @@ function buildImportSummary(input: {
   depositCount: number;
   paymentCount: number;
   transactionCount: number;
+  transferCount: number;
   uncategorizedCount: number;
 }) {
   const parts = [`Imported ${formatPlural(input.transactionCount, "transaction")}.`];
@@ -1265,6 +1266,12 @@ function buildImportSummary(input: {
   if (input.depositCount > 0) {
     parts.push(
       `${formatPlural(input.depositCount, "deposit row")} will stay out of spend and review.`,
+    );
+  }
+
+  if (input.transferCount > 0) {
+    parts.push(
+      `${formatPlural(input.transferCount, "transfer row")} will stay out of spend and review.`,
     );
   }
 
@@ -1417,6 +1424,7 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
   let uncategorizedCount = 0;
   let paymentCount = 0;
   let depositCount = 0;
+  let transferCount = 0;
   const statementMonth = deriveStatementMonth(parsedTransactions) ?? fallbackStatementMonth;
 
   const transaction = db.transaction(() => {
@@ -1462,6 +1470,10 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
         depositCount += 1;
       }
 
+      if (parsedTransaction.transactionKind === "transfer") {
+        transferCount += 1;
+      }
+
       insertTransaction.run(
         randomUUID(),
         statementId,
@@ -1485,6 +1497,7 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
         depositCount,
         paymentCount,
         transactionCount: parsedTransactions.length,
+        transferCount,
         uncategorizedCount,
       }),
       statementId,
@@ -1498,6 +1511,7 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
       depositCount,
       paymentCount,
       transactionCount: parsedTransactions.length,
+      transferCount,
       uncategorizedCount,
     }),
     statementId,
