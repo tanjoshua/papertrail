@@ -1,6 +1,6 @@
-# Ledger Garden
+# Paper Trail
 
-Ledger Garden is a local-first expense tracker built with Next.js and SQLite. It is designed around a practical personal-finance workflow:
+Paper Trail is a local-first expense tracker built with Next.js and SQLite. It is designed around a practical personal-finance workflow:
 
 1. Upload credit-card statements from multiple banks.
 2. Review merchants the app cannot recognize yet.

@@ -19,6 +19,7 @@ export type StatementSummary = {
   importedAt: string;
   lastPostedAt: string | null;
   monthsTouched: string[];
+  depositCents: number;
   netCents: number;
   notes: string | null;
   originalFileName: string;
@@ -34,6 +35,7 @@ export type StatementSummary = {
 export type MonthCard = {
   accountCount: number;
   categorizedCount: number;
+  depositCents: number;
   month: string;
   netCents: number;
   paymentCents: number;
@@ -111,6 +113,7 @@ export type MonthDetailData = {
     accountLabel: string | null;
     bankName: string;
     categorizedCount: number;
+    monthDepositCents: number;
     monthNetCents: number;
     monthPaymentCents: number;
     monthRefundCents: number;
@@ -135,6 +138,7 @@ export type MonthDetailData = {
   statementContributions: Array<
     StatementSummary & {
       monthNetCents: number;
+      monthDepositCents: number;
       monthPaymentCents: number;
       monthRefundCents: number;
       monthSpendCents: number;
@@ -144,6 +148,7 @@ export type MonthDetailData = {
   summary: {
     accountCount: number;
     categorizedCount: number;
+    depositCents: number;
     netCents: number;
     paymentCents: number;
     pendingCount: number;
@@ -224,6 +229,28 @@ export type StatementsPageData = {
     statementCount: number;
     storedStatementCount: number;
   };
+};
+
+export type StatementDetailData = {
+  categories: CategoryOption[];
+  statement: StatementSummary | null;
+  timeline: Array<{
+    date: string;
+    items: Array<{
+      amountCents: number;
+      categoryColor: string | null;
+      categoryId: string | null;
+      categoryName: string | null;
+      categorySource: string;
+      id: string;
+      merchantName: string;
+      month: string;
+      normalizedMerchant: string;
+      rawDescription: string;
+      transactionKind: TransactionKind;
+    }>;
+    totalCents: number;
+  }>;
 };
 
 type PendingTransactionRow = {
@@ -421,6 +448,7 @@ function getStatementSummaries(limit?: number) {
       COALESCE(SUM(CASE WHEN t.transaction_kind = 'expense' AND t.amount_cents > 0 THEN t.amount_cents ELSE 0 END), 0) AS spendCents,
       COALESCE(SUM(CASE WHEN t.transaction_kind = 'refund' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS refundCents,
       COALESCE(SUM(CASE WHEN t.transaction_kind = 'payment' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS paymentCents,
+      COALESCE(SUM(CASE WHEN t.transaction_kind = 'deposit' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS depositCents,
       COALESCE(SUM(t.amount_cents), 0) AS netCents,
       COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') THEN 1 ELSE 0 END), 0) AS reviewableTransactionCount,
       COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') AND t.category_id IS NULL THEN 1 ELSE 0 END), 0) AS pendingCount,
@@ -708,6 +736,7 @@ export function getOverviewData(): OverviewData {
           COALESCE(SUM(CASE WHEN t.transaction_kind = 'expense' AND t.amount_cents > 0 THEN t.amount_cents ELSE 0 END), 0) AS spendCents,
           COALESCE(SUM(CASE WHEN t.transaction_kind = 'refund' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS refundCents,
           COALESCE(SUM(CASE WHEN t.transaction_kind = 'payment' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS paymentCents,
+          COALESCE(SUM(CASE WHEN t.transaction_kind = 'deposit' THEN ABS(t.amount_cents) ELSE 0 END), 0) AS depositCents,
           COALESCE(SUM(t.amount_cents), 0) AS netCents,
           COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') AND t.category_id IS NULL THEN 1 ELSE 0 END), 0) AS pendingCount,
           COALESCE(SUM(CASE WHEN t.transaction_kind IN ('expense', 'refund') AND t.category_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS categorizedCount,
@@ -770,6 +799,35 @@ function getMonthTransactions(month: string) {
     .all(start, endExclusive) as MonthTransactionRow[];
 }
 
+function getStatementTransactions(statementId: string) {
+  return db
+    .prepare(
+      `
+        SELECT
+          t.id,
+          t.posted_at AS postedAt,
+          t.amount_cents AS amountCents,
+          t.merchant_name AS merchantName,
+          t.normalized_merchant AS normalizedMerchant,
+          t.raw_description AS rawDescription,
+          t.transaction_kind AS transactionKind,
+          t.category_id AS categoryId,
+          t.category_source AS categorySource,
+          c.name AS categoryName,
+          c.color AS categoryColor,
+          s.id AS statementId,
+          s.bank_name AS bankName,
+          s.account_label AS accountLabel
+        FROM transactions t
+        INNER JOIN statements s ON s.id = t.statement_id
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.statement_id = ?
+        ORDER BY t.posted_at DESC, ABS(t.amount_cents) DESC, t.created_at DESC
+      `,
+    )
+    .all(statementId) as MonthTransactionRow[];
+}
+
 export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
   const availableMonths = getAvailableMonths();
   const month = isMonthKey(requestedMonth) ? requestedMonth! : availableMonths[0] ?? getCurrentMonthKey();
@@ -780,6 +838,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
   const summary = {
     accountCount: 0,
     categorizedCount: 0,
+    depositCents: 0,
     netCents: 0,
     paymentCents: 0,
     pendingCount: 0,
@@ -802,6 +861,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
   const statementContributionMap = new Map<
     string,
     {
+      monthDepositCents: number;
       monthNetCents: number;
       monthPaymentCents: number;
       monthRefundCents: number;
@@ -824,6 +884,10 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
 
     if (transaction.transactionKind === "payment" && transaction.amountCents < 0) {
       summary.paymentCents += Math.abs(transaction.amountCents);
+    }
+
+    if (transaction.transactionKind === "deposit" && transaction.amountCents < 0) {
+      summary.depositCents += Math.abs(transaction.amountCents);
     }
 
     if (isCategorizableTransactionKind(transaction.transactionKind)) {
@@ -860,6 +924,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
       accountLabel: transaction.accountLabel,
       bankName: transaction.bankName,
       categorizedCount: 0,
+      monthDepositCents: 0,
       monthNetCents: 0,
       monthPaymentCents: 0,
       monthRefundCents: 0,
@@ -887,6 +952,10 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
       account.monthPaymentCents += Math.abs(transaction.amountCents);
     }
 
+    if (transaction.transactionKind === "deposit" && transaction.amountCents < 0) {
+      account.monthDepositCents += Math.abs(transaction.amountCents);
+    }
+
     if (isCategorizableTransactionKind(transaction.transactionKind)) {
       account.reviewableTransactionCount += 1;
 
@@ -900,6 +969,7 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
     accountMap.set(accountKey, account);
 
     const statementContribution = statementContributionMap.get(transaction.statementId) ?? {
+      monthDepositCents: 0,
       monthNetCents: 0,
       monthPaymentCents: 0,
       monthRefundCents: 0,
@@ -919,6 +989,10 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
 
     if (transaction.transactionKind === "payment" && transaction.amountCents < 0) {
       statementContribution.monthPaymentCents += Math.abs(transaction.amountCents);
+    }
+
+    if (transaction.transactionKind === "deposit" && transaction.amountCents < 0) {
+      statementContribution.monthDepositCents += Math.abs(transaction.amountCents);
     }
 
     statementContribution.monthTransactionCount += 1;
@@ -1018,6 +1092,42 @@ export function getMonthDetailData(requestedMonth?: string): MonthDetailData {
           : right.monthSpendCents - left.monthSpendCents,
       ),
     summary,
+    timeline: Array.from(dailyTimelineMap.values()).sort((left, right) => right.date.localeCompare(left.date)),
+  };
+}
+
+export function getStatementDetailData(statementId: string): StatementDetailData {
+  const statement = getStatementSummary(statementId);
+  const transactions = statement ? getStatementTransactions(statementId) : [];
+  const dailyTimelineMap = new Map<string, StatementDetailData["timeline"][number]>();
+
+  for (const transaction of transactions) {
+    const day = dailyTimelineMap.get(transaction.postedAt) ?? {
+      date: transaction.postedAt,
+      items: [],
+      totalCents: 0,
+    };
+
+    day.totalCents += transaction.amountCents;
+    day.items.push({
+      amountCents: transaction.amountCents,
+      categoryColor: transaction.categoryColor,
+      categoryId: transaction.categoryId,
+      categoryName: transaction.categoryName,
+      categorySource: transaction.categorySource,
+      id: transaction.id,
+      merchantName: transaction.merchantName,
+      month: transaction.postedAt.slice(0, 7),
+      normalizedMerchant: transaction.normalizedMerchant,
+      rawDescription: transaction.rawDescription,
+      transactionKind: transaction.transactionKind,
+    });
+    dailyTimelineMap.set(transaction.postedAt, day);
+  }
+
+  return {
+    categories: getCategoryOptions(),
+    statement,
     timeline: Array.from(dailyTimelineMap.values()).sort((left, right) => right.date.localeCompare(left.date)),
   };
 }
@@ -1201,7 +1311,7 @@ export function assignTransactionCategory(input: {
   }
 
   if (!isCategorizableTransactionKind(transactionRecord.transactionKind)) {
-    throw new Error("Card payments are classified automatically and do not need a category.");
+    throw new Error("This transaction is classified automatically and does not need a category.");
   }
 
   const now = new Date().toISOString();

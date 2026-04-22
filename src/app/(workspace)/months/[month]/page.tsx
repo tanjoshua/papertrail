@@ -9,7 +9,27 @@ import {
   SectionCard,
   StatementStatusBadge,
   TransactionKindBadge,
+  SummaryCard,
+  buttonLinkClassName,
+  chipClassName,
+  textLinkClassName,
+  workspaceContentGridClassName,
+  workspaceHeaderActionsClassName,
+  workspacePageStackClassName,
+  workspaceSectionCopyClassName,
+  workspaceStackListClassName,
+  workspaceSurfaceBlockClassName,
+  workspaceSurfaceRowClassName,
+  workspaceMeterTrackClassName,
+  workspaceMeterFillClassName,
+  workspaceTimelineDayClassName,
+  workspaceInlineActionsClassName,
+  workspaceFormTwoColumnClassName,
+  workspaceStatTextClassName,
 } from "@/app/(workspace)/_components/workspace-ui";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 type MonthPageProps = {
   params: Promise<{
@@ -40,17 +60,17 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
       : 100;
 
   return (
-    <div className="page-stack">
+    <div className={workspacePageStackClassName}>
       <PageHeader
         eyebrow="Month Page"
         title={formatMonthLabel(data.month)}
         description="This page combines every posted transaction that landed in the selected calendar month, no matter which statement or bank the rows came from."
         actions={
-          <div className="header-actions">
-            <Link href={`/review?month=${data.month}`} className="secondary-button">
+          <div className={workspaceHeaderActionsClassName}>
+            <Link href={`/review?month=${data.month}`} className={buttonLinkClassName({ variant: "outline" })}>
               Review this month
             </Link>
-            <Link href="/upload" className="primary-button">
+            <Link href="/upload" className={buttonLinkClassName()}>
               Add another statement
             </Link>
           </div>
@@ -59,73 +79,70 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
 
       <MessageBanner message={message} />
 
-      <section className="summary-band">
-        <article className="summary-item">
-          <p className="eyebrow">Spend</p>
-          <p className="summary-value">{formatCurrency(data.summary.spendCents)}</p>
-          <p className="summary-copy">
-            Net movement {formatCurrency(data.summary.netCents)} after {formatCurrency(data.summary.refundCents)} in refunds.
-          </p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Coverage</p>
-          <p className="summary-value">{coverage}%</p>
-          <p className="summary-copy">
-            {data.summary.reviewableTransactionCount > 0
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          eyebrow="Spend"
+          value={formatCurrency(data.summary.spendCents)}
+          description={`Net movement ${formatCurrency(data.summary.netCents)} after ${formatCurrency(data.summary.refundCents)} in refunds and ${formatCurrency(data.summary.depositCents)} in deposits.`}
+        />
+        <SummaryCard
+          eyebrow="Coverage"
+          value={`${coverage}%`}
+          description={
+            data.summary.reviewableTransactionCount > 0
               ? `${data.summary.categorizedCount} of ${data.summary.reviewableTransactionCount} reviewable transactions already have a category.`
-              : "This month only contains activity that does not need merchant categorization."}
-          </p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Card payments</p>
-          <p className="summary-value">{formatCurrency(data.summary.paymentCents)}</p>
-          <p className="summary-copy">
-            {data.summary.paymentCents > 0
-              ? "Recognized automatically and excluded from spend and review."
-              : "No payment rows were detected in this month."}
-          </p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Needs review</p>
-          <p className="summary-value">{data.summary.pendingCount}</p>
-          <p className="summary-copy">
-            {data.summary.topCategoryName ? `Top category: ${data.summary.topCategoryName}.` : "Categories appear after you start classifying merchants."}
-          </p>
-        </article>
+              : "This month only contains activity that does not need merchant categorization."
+          }
+        />
+        <SummaryCard
+          eyebrow="Excluded inflows"
+          value={formatCurrency(data.summary.paymentCents + data.summary.depositCents)}
+          description={
+            data.summary.paymentCents + data.summary.depositCents > 0
+              ? `${formatCurrency(data.summary.depositCents)} deposits / ${formatCurrency(data.summary.paymentCents)} card payments.`
+              : "No excluded inflow rows were detected in this month."
+          }
+        />
+        <SummaryCard
+          eyebrow="Needs review"
+          value={data.summary.pendingCount}
+          description={
+            data.summary.topCategoryName
+              ? `Top category: ${data.summary.topCategoryName}.`
+              : "Categories appear after you start classifying merchants."
+          }
+        />
       </section>
 
-      <section className="content-grid">
-        <div className="space-y-6">
+      <section className={workspaceContentGridClassName}>
+        <div className="flex flex-col gap-6">
           <SectionCard
             eyebrow="Breakdown"
             title={`How ${formatMonthLabel(data.month)} was spent`}
             description="Category bars are calculated from positive spend, so refunds do not flatten your real spending picture."
           >
             {data.categoryBreakdown.length > 0 ? (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 {data.categoryBreakdown.map((category) => (
-                  <div key={category.name} className="breakdown-row">
+                  <div key={category.name} className={workspaceSurfaceBlockClassName}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: category.color }} />
                         <div>
-                          <p className="font-semibold text-stone-900">{category.name}</p>
-                          <p className="section-copy">
+                          <p className="font-semibold text-foreground">{category.name}</p>
+                          <p className={workspaceSectionCopyClassName}>
                             {category.transactionCount} transaction{category.transactionCount === 1 ? "" : "s"}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold text-stone-900">{formatCurrency(category.totalCents)}</p>
-                        <p className="section-copy">{Math.round(category.share * 100)}% of categorized outflow</p>
+                        <p className="font-semibold text-foreground">{formatCurrency(category.totalCents)}</p>
+                        <p className={workspaceSectionCopyClassName}>{Math.round(category.share * 100)}% of categorized outflow</p>
                       </div>
                     </div>
-                    <div className="meter-track">
+                    <div className={workspaceMeterTrackClassName}>
                       <div
-                        className="meter-fill"
+                        className={workspaceMeterFillClassName}
                         style={{
                           backgroundColor: category.color,
                           width: `${Math.max(6, Math.round(category.share * 100))}%`,
@@ -149,27 +166,29 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
             description="This is where multiple banks and cards for the same month stay legible instead of blending together."
           >
             {data.accounts.length > 0 ? (
-              <div className="stack-list">
+              <div className={workspaceStackListClassName}>
                 {data.accounts.map((account) => (
                   <div
                     key={`${account.bankName}-${account.accountLabel ?? "default"}`}
-                    className="account-row"
+                    className={workspaceSurfaceRowClassName}
                   >
                     <div className="space-y-1">
-                      <p className="font-semibold text-stone-900">
+                      <p className="font-semibold text-foreground">
                         {account.bankName}
                         {account.accountLabel ? ` / ${account.accountLabel}` : ""}
                       </p>
-                      <p className="section-copy">
+                      <p className={workspaceSectionCopyClassName}>
                         {account.statementCount} statement{account.statementCount === 1 ? "" : "s"} / {account.transactionCount} transaction
                         {account.transactionCount === 1 ? "" : "s"} / {account.pendingCount} pending
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-stone-900">{formatCurrency(account.monthSpendCents)}</p>
-                      <p className="section-copy">
+                      <p className="font-semibold text-foreground">{formatCurrency(account.monthSpendCents)}</p>
+                      <p className={workspaceSectionCopyClassName}>
                         {account.monthPaymentCents > 0
-                          ? `Payments ${formatCurrency(account.monthPaymentCents)} / Net ${formatCurrency(account.monthNetCents)}`
+                          ? `Payments ${formatCurrency(account.monthPaymentCents)} / Deposits ${formatCurrency(account.monthDepositCents)} / Net ${formatCurrency(account.monthNetCents)}`
+                          : account.monthDepositCents > 0
+                            ? `Deposits ${formatCurrency(account.monthDepositCents)} / Net ${formatCurrency(account.monthNetCents)}`
                           : `Net ${formatCurrency(account.monthNetCents)}`}
                       </p>
                     </div>
@@ -190,21 +209,21 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
             description="Uncategorized rows can be fixed in place here, while grouped reusable review happens on the review page."
           >
             {data.timeline.length > 0 ? (
-              <div className="space-y-6">
+              <div className="flex flex-col gap-6">
                 {data.timeline.map((day) => (
-                  <div key={day.date} className="space-y-3">
-                    <div className="timeline-day">
-                      <p className="font-semibold text-stone-900">{formatDay(day.date)}</p>
-                      <p className="section-copy">{formatCurrency(day.totalCents)}</p>
+                  <div key={day.date} className="flex flex-col gap-3">
+                    <div className={workspaceTimelineDayClassName}>
+                      <p className="font-semibold text-foreground">{formatDay(day.date)}</p>
+                      <p className={workspaceSectionCopyClassName}>{formatCurrency(day.totalCents)}</p>
                     </div>
 
-                    <div className="stack-list">
+                    <div className={workspaceStackListClassName}>
                       {day.items.map((item) => (
-                        <article key={item.id} className="transaction-row">
-                          <div className="space-y-2">
+                        <article key={item.id} className="flex flex-wrap items-start justify-between gap-4 rounded-[24px] border bg-card p-4 shadow-sm">
+                          <div className="flex flex-col gap-2">
                             <div className="flex flex-wrap items-center gap-3">
-                              <p className="font-semibold text-stone-900">{item.merchantName}</p>
-                              <span className="chip">
+                              <p className="font-semibold text-foreground">{item.merchantName}</p>
+                              <span className={chipClassName()}>
                                 {item.bankName}
                                 {item.accountLabel ? ` / ${item.accountLabel}` : ""}
                               </span>
@@ -212,15 +231,15 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                                 <TransactionKindBadge kind={item.transactionKind} />
                               ) : null}
                             </div>
-                            <p className="section-copy">{item.rawDescription}</p>
+                            <p className={workspaceSectionCopyClassName}>{item.rawDescription}</p>
                           </div>
 
-                          <div className="transaction-side">
-                            <p className="transaction-amount">{formatCurrency(item.amountCents)}</p>
+                          <div className="flex w-full flex-wrap items-center justify-between gap-4 lg:w-auto">
+                            <p className={workspaceStatTextClassName}>{formatCurrency(item.amountCents)}</p>
 
                             {item.categoryId ? (
                               <span
-                                className="category-pill"
+                                className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold"
                                 style={{
                                   backgroundColor: item.categoryColor ?? "#e7dfd3",
                                   color: item.categoryColor
@@ -230,33 +249,46 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                               >
                                 {item.categoryName}
                               </span>
-                            ) : item.transactionKind === "payment" ? (
-                              <div className="space-y-1 text-right">
+                            ) : item.transactionKind === "payment" || item.transactionKind === "deposit" ? (
+                              <div className="flex flex-col gap-1 text-right">
                                 <TransactionKindBadge kind={item.transactionKind} />
-                                <p className="section-copy">Excluded from spend and category review.</p>
+                                <p className={workspaceSectionCopyClassName}>Excluded from spend and category review.</p>
                               </div>
                             ) : (
-                              <form action={assignCategoryAction} className="inline-review-form">
+                              <form action={assignCategoryAction}>
                                 <input type="hidden" name="transactionId" value={item.id} />
                                 <input type="hidden" name="returnTo" value={returnTo} />
-                                <select name="categoryId" defaultValue="" className="field field-compact" required>
-                                  <option value="" disabled>
-                                    Pick category
-                                  </option>
-                                  {data.categories.map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                      {category.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <div className="inline-review-actions">
-                                  <button type="submit" name="scope" value="once" className="secondary-button compact-button">
-                                    Only this
-                                  </button>
-                                  <button type="submit" name="scope" value="future" className="primary-button compact-button">
-                                    Save rule
-                                  </button>
-                                </div>
+                                <FieldGroup className="grid gap-3">
+                                  <Field>
+                                    <FieldLabel htmlFor={`transaction-category-${item.id}`} className="sr-only">
+                                      Pick category
+                                    </FieldLabel>
+                                    <NativeSelect
+                                      id={`transaction-category-${item.id}`}
+                                      name="categoryId"
+                                      defaultValue=""
+                                      className="w-full"
+                                      required
+                                    >
+                                      <NativeSelectOption value="" disabled>
+                                        Pick category
+                                      </NativeSelectOption>
+                                      {data.categories.map((category) => (
+                                        <NativeSelectOption key={category.id} value={category.id}>
+                                          {category.name}
+                                        </NativeSelectOption>
+                                      ))}
+                                    </NativeSelect>
+                                  </Field>
+                                  <div className={workspaceInlineActionsClassName}>
+                                    <Button type="submit" name="scope" value="once" variant="outline" size="sm">
+                                      Only this
+                                    </Button>
+                                    <Button type="submit" name="scope" value="future" size="sm">
+                                      Save rule
+                                    </Button>
+                                  </div>
+                                </FieldGroup>
                               </form>
                             )}
                           </div>
@@ -277,30 +309,30 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
           </SectionCard>
         </div>
 
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <SectionCard
             eyebrow="Statements"
             title="Which statement files fed this month"
             description="A single statement can contribute to multiple month pages, and you can hop from here into any month it touched."
           >
             {data.statementContributions.length > 0 ? (
-              <div className="stack-list">
+              <div className={workspaceStackListClassName}>
                 {data.statementContributions.map((statement) => (
-                  <div key={statement.id} className="statement-row">
+                  <div key={statement.id} className={workspaceSurfaceRowClassName}>
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-3">
-                        <p className="font-semibold text-stone-900">
+                        <p className="font-semibold text-foreground">
                           {statement.bankName}
                           {statement.accountLabel ? ` / ${statement.accountLabel}` : ""}
                         </p>
                         <StatementStatusBadge status={statement.status} />
                       </div>
-                      <p className="section-copy">
+                      <p className={workspaceSectionCopyClassName}>
                         Cycle label {formatMonthLabel(statement.cycleMonth)} / {statement.originalFileName}
                       </p>
-                      <div className="chip-row">
+                      <div className="flex flex-wrap gap-3">
                         {statement.monthsTouched.map((month) => (
-                          <Link key={month} href={`/months/${month}`} className="chip">
+                          <Link key={month} href={`/months/${month}`} className={chipClassName()}>
                             {formatMonthLabel(month)}
                           </Link>
                         ))}
@@ -308,10 +340,11 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
                     </div>
 
                     <div className="text-right">
-                      <p className="font-semibold text-stone-900">{formatCurrency(statement.monthSpendCents)}</p>
-                      <p className="section-copy">
+                      <p className="font-semibold text-foreground">{formatCurrency(statement.monthSpendCents)}</p>
+                      <p className={workspaceSectionCopyClassName}>
                         {statement.monthTransactionCount} row{statement.monthTransactionCount === 1 ? "" : "s"} in this month
                         {statement.monthPaymentCents > 0 ? ` / Payments ${formatCurrency(statement.monthPaymentCents)}` : ""}
+                        {statement.monthDepositCents > 0 ? ` / Deposits ${formatCurrency(statement.monthDepositCents)}` : ""}
                       </p>
                     </div>
                   </div>
@@ -330,42 +363,55 @@ export default async function MonthPage({ params, searchParams }: MonthPageProps
             title="Merchants still waiting in this month"
             description="Use the grouped action below when you want to teach the app a merchant once and apply it everywhere the same normalized merchant appears."
             action={
-              <Link href={`/review?month=${data.month}`} className="sidebar-link">
+              <Link href={`/review?month=${data.month}`} className={textLinkClassName()}>
                 Open grouped review
               </Link>
             }
           >
             {data.reviewQueue.length > 0 ? (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 {data.reviewQueue.map((group) => (
-                  <article key={group.normalizedMerchant} className="review-group-card">
+                  <article key={group.normalizedMerchant} className={workspaceSurfaceBlockClassName}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="font-semibold text-stone-900">{group.displayName}</p>
-                        <p className="section-copy">
+                      <div className="flex flex-col gap-1">
+                        <p className="font-semibold text-foreground">{group.displayName}</p>
+                        <p className={workspaceSectionCopyClassName}>
                           {group.transactionCount} transaction{group.transactionCount === 1 ? "" : "s"} / {group.banks.join(", ")}
                         </p>
                       </div>
-                      <p className="transaction-amount">{formatCurrency(group.spendCents)}</p>
+                      <p className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                        {formatCurrency(group.spendCents)}
+                      </p>
                     </div>
 
-                    <form action={assignCategoryAction} className="review-rule-form">
+                    <form action={assignCategoryAction}>
                       <input type="hidden" name="transactionId" value={group.representativeTransactionId} />
                       <input type="hidden" name="returnTo" value={returnTo} />
                       <input type="hidden" name="scope" value="future" />
-                      <select name="categoryId" defaultValue="" className="field" required>
-                        <option value="" disabled>
-                          Save a reusable category
-                        </option>
-                        {data.categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="submit" className="primary-button">
-                        Save merchant rule
-                      </button>
+                      <FieldGroup className={workspaceFormTwoColumnClassName}>
+                        <Field>
+                          <FieldLabel htmlFor={`month-review-category-${group.normalizedMerchant}`} className="sr-only">
+                            Save a reusable category
+                          </FieldLabel>
+                          <NativeSelect
+                            id={`month-review-category-${group.normalizedMerchant}`}
+                            name="categoryId"
+                            defaultValue=""
+                            className="w-full"
+                            required
+                          >
+                            <NativeSelectOption value="" disabled>
+                              Save a reusable category
+                            </NativeSelectOption>
+                            {data.categories.map((category) => (
+                              <NativeSelectOption key={category.id} value={category.id}>
+                                {category.name}
+                              </NativeSelectOption>
+                            ))}
+                          </NativeSelect>
+                        </Field>
+                        <Button type="submit">Save merchant rule</Button>
+                      </FieldGroup>
                     </form>
                   </article>
                 ))}

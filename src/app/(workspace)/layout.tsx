@@ -2,6 +2,12 @@ import Link from "next/link";
 import { getOverviewData } from "@/lib/expenses";
 import { formatMonthLabel } from "@/lib/format";
 import { NavLink } from "./_components/nav-link";
+import {
+  chipClassName,
+  textLinkClassName,
+  workspaceEyebrowClassName,
+  workspaceSectionCopyClassName,
+} from "./_components/workspace-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -14,18 +20,18 @@ export default function WorkspaceLayout({
   const recentMonths = overview.availableMonths.slice(0, 6);
 
   return (
-    <div className="workspace-shell">
-      <aside className="workspace-sidebar">
-        <div className="brand-block">
-          <Link href="/" className="brand-mark">
-            Ledger Garden
+    <div className="mx-auto grid min-h-screen w-full max-w-[1600px] gap-6 px-4 py-4 lg:grid-cols-[296px_minmax(0,1fr)] lg:px-6 lg:py-6">
+      <aside className="rounded-[30px] border bg-card px-5 py-6 shadow-sm lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)]">
+        <div className="flex flex-col gap-3 border-b pb-5">
+          <Link href="/" className="font-[family-name:var(--font-display)] text-3xl leading-none text-foreground">
+            Paper Trail
           </Link>
-          <p className="brand-copy">
+          <p className={workspaceSectionCopyClassName}>
             A month-led workspace for importing statements, clearing merchant review, and tracing spend across banks.
           </p>
         </div>
 
-        <nav className="workspace-nav" aria-label="Primary">
+        <nav className="my-6 grid gap-2" aria-label="Primary">
           <NavLink href="/">Overview</NavLink>
           <NavLink href="/upload">Upload</NavLink>
           <NavLink href="/review">Review</NavLink>
@@ -33,40 +39,44 @@ export default function WorkspaceLayout({
           <NavLink href="/statements">Statements</NavLink>
         </nav>
 
-        <div className="sidebar-section">
-          <div className="sidebar-heading">
-            <p className="eyebrow">Open Loops</p>
-            <span className="sidebar-stat">{overview.pendingTransactionCount}</span>
+        <div className="flex flex-col gap-3 border-t pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className={workspaceEyebrowClassName}>Open Loops</p>
+            <span className={chipClassName({ active: true })}>{overview.pendingTransactionCount}</span>
           </div>
-          <p className="sidebar-copy">
+          <p className={workspaceSectionCopyClassName}>
             Pending transactions stay in review until you save a reusable merchant memory or fix a one-off.
           </p>
         </div>
 
-        <div className="sidebar-section">
-          <div className="sidebar-heading">
-            <p className="eyebrow">Recent Months</p>
-            <Link href="/" className="sidebar-link">
+        <div className="flex flex-col gap-3 border-t pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className={workspaceEyebrowClassName}>Recent Months</p>
+            <Link href="/" className={textLinkClassName()}>
               See all
             </Link>
           </div>
-          <div className="month-link-stack">
+          <div className="grid gap-3">
             {recentMonths.length > 0 ? (
               recentMonths.map((month) => (
-                <Link key={month} href={`/months/${month}`} className="month-jump">
+                <Link
+                  key={month}
+                  href={`/months/${month}`}
+                  className="flex items-center justify-between gap-3 rounded-[24px] border bg-card px-4 py-4 shadow-sm transition-colors hover:bg-accent/40"
+                >
                   <span>{formatMonthLabel(month)}</span>
-                  <span className="month-jump-arrow">Open</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Open</span>
                 </Link>
               ))
             ) : (
-              <p className="sidebar-copy">Month pages appear after your first parsed statement lands.</p>
+              <p className={workspaceSectionCopyClassName}>Month pages appear after your first parsed statement lands.</p>
             )}
           </div>
         </div>
       </aside>
 
-      <div className="workspace-main">
-        <main className="workspace-content">{children}</main>
+      <div className="min-w-0">
+        <main className="flex min-h-full flex-col">{children}</main>
       </div>
     </div>
   );

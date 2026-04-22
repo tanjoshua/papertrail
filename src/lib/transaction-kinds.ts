@@ -1,8 +1,9 @@
-export const TRANSACTION_KINDS = ["expense", "refund", "payment"] as const;
+export const TRANSACTION_KINDS = ["expense", "refund", "payment", "deposit"] as const;
 
 export type TransactionKind = (typeof TRANSACTION_KINDS)[number];
 
 const PAYMENT_PATTERNS = [
+  /\bFAST\s*INCOMING\s*PAYMENT\b/i,
   /PAYMT\s+THRU\s+E[-\s]?BANK/i,
   /\bPAYMENT\s+RECEIVED\b/i,
   /\bPAYMENT\s+-\s+THANK\s+YOU\b/i,
@@ -32,7 +33,7 @@ export function inferTransactionKind(rawDescription: string, amountCents: number
 }
 
 export function normalizeTransactionAmount(kind: TransactionKind, amountCents: number) {
-  if (kind === "payment") {
+  if (kind === "payment" || kind === "deposit") {
     return -Math.abs(amountCents);
   }
 
@@ -40,13 +41,15 @@ export function normalizeTransactionAmount(kind: TransactionKind, amountCents: n
 }
 
 export function isCategorizableTransactionKind(kind: TransactionKind) {
-  return kind !== "payment";
+  return kind !== "payment" && kind !== "deposit";
 }
 
 export function getTransactionKindLabel(kind: TransactionKind) {
   switch (kind) {
     case "payment":
       return "Card payment";
+    case "deposit":
+      return "Deposit";
     case "refund":
       return "Refund";
     default:
@@ -58,6 +61,8 @@ export function getTransactionKindDescription(kind: TransactionKind) {
   switch (kind) {
     case "payment":
       return "Excluded from spending totals and category review.";
+    case "deposit":
+      return "Incoming account movement, excluded from spend and category review.";
     case "refund":
       return "Offsets earlier spend but still keeps the original category context.";
     default:

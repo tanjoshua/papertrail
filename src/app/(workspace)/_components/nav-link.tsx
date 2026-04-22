@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 type NavLinkProps = {
   children: React.ReactNode;
@@ -23,7 +25,10 @@ export function NavLink({ children, href }: NavLinkProps) {
   return (
     <Link
       href={href}
-      className={active ? "nav-link nav-link-active" : "nav-link"}
+      className={cn(
+        buttonVariants({ variant: active ? "secondary" : "ghost", size: "lg" }),
+        "w-full justify-start rounded-2xl px-4 py-3 text-sm"
+      )}
       aria-current={active ? "page" : undefined}
     >
       {children}

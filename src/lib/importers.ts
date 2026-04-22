@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { extname, join } from "node:path";
+import { inflateSync } from "node:zlib";
 import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { db, getUploadsDirectory } from "./db";
@@ -42,7 +43,9 @@ type ParsedTransaction = {
 
 export const STATEMENT_PARSER_TYPES = [
   "auto",
+  "citibank-card-pdf",
   "generic-tabular",
+  "uob-account-pdf",
   "uob-card-xls",
 ] as const;
 
@@ -63,11 +66,23 @@ export const STATEMENT_PARSER_DETAILS: Record<
     hint: "Recommended. Try the best known parser from the file name and file shape.",
     label: "Auto-detect",
   },
+  "citibank-card-pdf": {
+    accountLabel: null,
+    bankName: "Citibank",
+    hint: "Use the Citibank eStatement PDF with DATE / DESCRIPTION / AMOUNT (SGD) sections.",
+    label: "Citibank credit card eStatement (.pdf)",
+  },
   "generic-tabular": {
     accountLabel: null,
     bankName: "Imported Statement",
     hint: "Use for standard Date / Description / Amount style exports.",
     label: "Generic CSV or spreadsheet",
+  },
+  "uob-account-pdf": {
+    accountLabel: "One Account",
+    bankName: "UOB",
+    hint: "Use the UOB bank account eStatement PDF with Date / Description / Withdrawals / Deposits columns.",
+    label: "UOB One Account eStatement (.pdf)",
   },
   "uob-card-xls": {
     accountLabel: "Preferred Platinum Visa",
@@ -126,6 +141,8 @@ const CREDIT_HEADERS = ["credit", "credits", "credit amount", "refund", "refunds
 const CURRENCY_HEADERS = ["currency", "ccy"];
 const CSV_EXTENSIONS = new Set([".csv"]);
 const CSV_MIME_TYPES = new Set(["text/csv", "application/csv"]);
+const PDF_EXTENSIONS = new Set([".pdf"]);
+const PDF_MIME_TYPES = new Set(["application/pdf"]);
 const SPREADSHEET_EXTENSIONS = new Set([".xls", ".xlsx"]);
 const SPREADSHEET_MIME_TYPES = new Set([
   "application/vnd.ms-excel",
@@ -443,6 +460,586 @@ function parseUobSpreadsheet(buffer: Buffer) {
   );
 }
 
+type PdfTextItem = {
+  text: string;
+  x: number;
+  y: number;
+};
+
+type ParsedPdfPage = {
+  lines: string[];
+  pageNumber: number;
+  totalPages: number;
+};
+
+type ParsedStatementIdentity = {
+  accountLabel: string | null;
+  bankName: string;
+};
+
+type StatementParseResult = {
+  parserKey: string;
+  parsedTransactions: ImportedParsedTransaction[];
+  resolvedIdentity?: ParsedStatementIdentity;
+};
+
+const CITIBANK_MONTH_LOOKUP: Record<string, number> = {
+  JAN: 1,
+  FEB: 2,
+  MAR: 3,
+  APR: 4,
+  MAY: 5,
+  JUN: 6,
+  JUL: 7,
+  AUG: 8,
+  SEP: 9,
+  OCT: 10,
+  NOV: 11,
+  DEC: 12,
+};
+
+function extractPdfContentStreams(buffer: Buffer) {
+  const source = buffer.toString("latin1");
+  const objectPattern = /(\d+)\s+0\s+obj\s*<<([\s\S]*?)>>\s*stream\r?\n/g;
+  const streams: string[] = [];
+
+  for (const match of source.matchAll(objectPattern)) {
+    const dictionary = match[2] ?? "";
+
+    if (!dictionary.includes("/FlateDecode")) {
+      continue;
+    }
+
+    const streamStart = match.index + match[0].length;
+    const streamEnd = source.indexOf("endstream", streamStart);
+
+    if (streamEnd < 0) {
+      continue;
+    }
+
+    const startOffset = Buffer.byteLength(source.slice(0, streamStart), "latin1");
+    const endOffset = Buffer.byteLength(source.slice(0, streamEnd), "latin1");
+    let streamBuffer = buffer.subarray(startOffset, endOffset);
+
+    if (streamBuffer[0] === 0x0d && streamBuffer[1] === 0x0a) {
+      streamBuffer = streamBuffer.subarray(2);
+    } else if (streamBuffer[0] === 0x0a) {
+      streamBuffer = streamBuffer.subarray(1);
+    }
+
+    try {
+      streams.push(inflateSync(streamBuffer).toString("latin1"));
+    } catch {
+      continue;
+    }
+  }
+
+  return streams;
+}
+
+function extractPdfTextItems(stream: string) {
+  const items: PdfTextItem[] = [];
+  const tokenPattern =
+    /1 0 0 1\s+([\d.-]+)\s+([\d.-]+)\s+Tm|0 1 -1 0\s+([\d.-]+)\s+([\d.-]+)\s+Tm|([\d.-]+)\s+([\d.-]+)\s+Td|(\((?:\\.|[^\\)])*\))\s*Tj/g;
+  let x = 0;
+  let y = 0;
+
+  for (const match of stream.matchAll(tokenPattern)) {
+    if (match[1] && match[2]) {
+      x = Number.parseFloat(match[1]);
+      y = Number.parseFloat(match[2]);
+      continue;
+    }
+
+    if (match[3] && match[4]) {
+      x = Number.parseFloat(match[3]);
+      y = Number.parseFloat(match[4]);
+      continue;
+    }
+
+    if (match[5] && match[6]) {
+      x = Number.parseFloat(match[5]);
+      y = Number.parseFloat(match[6]);
+      continue;
+    }
+
+    const rawText = (match[7] ?? "").slice(1, -1).replace(/\\([\\()])/g, "$1");
+
+    if (!collapseWhitespace(rawText)) {
+      continue;
+    }
+
+    items.push({ text: rawText, x, y });
+  }
+
+  return items;
+}
+
+function reconstructPdfLines(items: PdfTextItem[]) {
+  const rows: Array<{ items: PdfTextItem[]; y: number }> = [];
+
+  for (const item of items) {
+    let row = rows.find((candidate) => Math.abs(candidate.y - item.y) < 1.1);
+
+    if (!row) {
+      row = { items: [], y: item.y };
+      rows.push(row);
+    }
+
+    row.items.push(item);
+  }
+
+  rows.sort((left, right) => right.y - left.y);
+
+  return rows.map((row) => {
+    row.items.sort((left, right) => left.x - right.x);
+
+    let line = "";
+    let previousEndX: number | null = null;
+
+    for (const item of row.items) {
+      if (previousEndX !== null && item.x - previousEndX > 6) {
+        line += " ";
+      }
+
+      line += item.text;
+      previousEndX = item.x + Math.max(3, item.text.length * 3.4);
+    }
+
+    return collapseWhitespace(line);
+  });
+}
+
+function extractPdfPages(buffer: Buffer) {
+  const bestPages = new Map<number, ParsedPdfPage>();
+
+  for (const stream of extractPdfContentStreams(buffer)) {
+    const items = extractPdfTextItems(stream);
+
+    if (items.length < 20) {
+      continue;
+    }
+
+    const lines = reconstructPdfLines(items);
+    const pageLine = lines.find((line) => /^Page\d+of\d+$/i.test(line.replace(/\s+/g, "")));
+
+    if (!pageLine) {
+      continue;
+    }
+
+    const pageMatch = pageLine.replace(/\s+/g, "").match(/^Page(\d+)of(\d+)$/i);
+
+    if (!pageMatch) {
+      continue;
+    }
+
+    const pageNumber = Number.parseInt(pageMatch[1], 10);
+    const totalPages = Number.parseInt(pageMatch[2], 10);
+    const current = bestPages.get(pageNumber);
+
+    if (!current || lines.join("").length > current.lines.join("").length) {
+      bestPages.set(pageNumber, { lines, pageNumber, totalPages });
+    }
+  }
+
+  return Array.from(bestPages.values()).sort((left, right) => left.pageNumber - right.pageNumber);
+}
+
+function resolveCitibankAccountLabel(rawAccountName: string | null) {
+  if (!rawAccountName) {
+    return null;
+  }
+
+  if (rawAccountName.includes("CITIREWARDSWORLDMASTERCARD")) {
+    return "Citi Rewards World Mastercard";
+  }
+
+  if (rawAccountName.includes("CITIPREMIERMILES")) {
+    return "Citi PremierMiles World Mastercard";
+  }
+
+  return "Citibank Credit Card";
+}
+
+function parseCitibankStatementDate(lines: string[]) {
+  for (const line of lines) {
+    const compact = line.replace(/\s+/g, "");
+    const match = compact.match(/StatementDate:?(January|February|March|April|May|June|July|August|September|October|November|December)(\d{1,2}),(\d{4})/i);
+
+    if (!match) {
+      continue;
+    }
+
+    const month = MONTH_LOOKUP.get(match[1].slice(0, 3).toLowerCase());
+    const day = Number.parseInt(match[2], 10);
+    const year = Number.parseInt(match[3], 10);
+
+    if (!month) {
+      continue;
+    }
+
+    return { month, year, isoDate: `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}` };
+  }
+
+  return null;
+}
+
+function parseCitibankPostedAt(day: string, monthToken: string, statementDate: { month: number; year: number }) {
+  const month = CITIBANK_MONTH_LOOKUP[monthToken.toUpperCase()];
+
+  if (!month) {
+    return null;
+  }
+
+  const numericDay = Number.parseInt(day, 10);
+
+  if (numericDay < 1 || numericDay > 31) {
+    return null;
+  }
+
+  const year = month > statementDate.month ? statementDate.year - 1 : statementDate.year;
+  return `${year}-${`${month}`.padStart(2, "0")}-${`${numericDay}`.padStart(2, "0")}`;
+}
+
+function parseUobStatementPeriodEnd(lines: string[]) {
+  for (const line of lines) {
+    const match = line.match(
+      /Period:\s+\d{1,2}\s+([A-Za-z]{3,9})\s+(\d{4})\s+to\s+(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})/i,
+    );
+
+    if (!match) {
+      continue;
+    }
+
+    const month = MONTH_LOOKUP.get(match[4].slice(0, 3).toLowerCase());
+    const day = Number.parseInt(match[3], 10);
+    const year = Number.parseInt(match[5], 10);
+
+    if (month && day >= 1 && day <= 31) {
+      return { month, year, isoDate: `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}` };
+    }
+  }
+
+  return null;
+}
+
+function parseUobPostedAt(dayToken: string, monthToken: string, statementPeriodEnd: { month: number; year: number }) {
+  const month = MONTH_LOOKUP.get(monthToken.slice(0, 3).toLowerCase());
+
+  if (!month) {
+    return null;
+  }
+
+  const day = Number.parseInt(dayToken, 10);
+
+  if (day < 1 || day > 31) {
+    return null;
+  }
+
+  const year = month > statementPeriodEnd.month ? statementPeriodEnd.year - 1 : statementPeriodEnd.year;
+  return `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+}
+
+function resolveUobAccountLabel(lines: string[]) {
+  const accountLine = lines.find((line) => /^One Account\s+\d{3}-\d{3}-\d{3}-\d/i.test(line));
+
+  if (accountLine) {
+    return "One Account";
+  }
+
+  return "UOB Account";
+}
+
+function parseUobBankAccountPdf(buffer: Buffer): StatementParseResult {
+  const pages = extractPdfPages(buffer);
+
+  if (pages.length === 0) {
+    throw new Error("The PDF was saved, but I could not read a recognizable UOB text layout from it.");
+  }
+
+  const allLines = pages.flatMap((page) => page.lines);
+  const statementPeriodEnd = parseUobStatementPeriodEnd(allLines);
+
+  if (!statementPeriodEnd) {
+    throw new Error("The PDF was saved, but I could not find the UOB statement period needed to anchor transaction years.");
+  }
+
+  const parsedTransactions: ImportedParsedTransaction[] = [];
+  const accountLabel = resolveUobAccountLabel(allLines);
+  let previousBalanceCents: number | null = null;
+  let activeTransaction: {
+    amountCents: number;
+    balanceCents: number;
+    descriptionParts: string[];
+    isDeposit: boolean;
+    pageNumber: number;
+    postedAt: string;
+    rawAmount: string;
+    rawBalance: string;
+  } | null = null;
+
+  const finishActiveTransaction = () => {
+    if (!activeTransaction) {
+      return;
+    }
+
+    const rawDescription = collapseWhitespace(activeTransaction.descriptionParts.join(" "));
+
+    if (!rawDescription) {
+      activeTransaction = null;
+      return;
+    }
+
+    const merchantSource = deriveMerchantFromDescription(rawDescription);
+    const normalizedMerchant = normalizeMerchant(merchantSource || rawDescription);
+    const merchantName = prettifyMerchant(merchantSource || rawDescription);
+
+    if (!normalizedMerchant) {
+      activeTransaction = null;
+      return;
+    }
+
+    const rawSignedAmountCents = activeTransaction.isDeposit
+      ? -Math.abs(activeTransaction.amountCents)
+      : Math.abs(activeTransaction.amountCents);
+    const transactionKind = activeTransaction.isDeposit
+      ? "deposit"
+      : inferTransactionKind(rawDescription, rawSignedAmountCents);
+
+    parsedTransactions.push({
+      amountCents: normalizeTransactionAmount(transactionKind, rawSignedAmountCents),
+      currency: "SGD",
+      merchantName,
+      normalizedMerchant,
+      postedAt: activeTransaction.postedAt,
+      rawDescription,
+      rawRowJson: JSON.stringify({
+        account: accountLabel,
+        amount: activeTransaction.rawAmount,
+        balance: activeTransaction.rawBalance,
+        isDeposit: activeTransaction.isDeposit,
+        pageNumber: activeTransaction.pageNumber,
+        statementPeriodEnd: statementPeriodEnd.isoDate,
+      }),
+      transactionKind,
+    });
+
+    activeTransaction = null;
+  };
+
+  for (const page of pages) {
+    let insideTransactionTable = false;
+
+    for (const line of page.lines) {
+      if (/^Date\s+Description\s+Withdrawals\s+Deposits\s+Balance$/i.test(line)) {
+        insideTransactionTable = true;
+        continue;
+      }
+
+      if (/^-+\s*End of Transaction Details\s*-+$/i.test(line)) {
+        finishActiveTransaction();
+        insideTransactionTable = false;
+        continue;
+      }
+
+      if (!insideTransactionTable) {
+        continue;
+      }
+
+      if (/^Pleasenotethatyouareboundbyadutyunder/i.test(line) || /^United Overseas Bank Limited/i.test(line)) {
+        finishActiveTransaction();
+        continue;
+      }
+
+      if (/^(?:SGD\s+){2}SGD$/i.test(line) || /^Total\s+/i.test(line)) {
+        finishActiveTransaction();
+        continue;
+      }
+
+      const balanceForwardMatch = line.match(/^(\d{2})\s+([A-Za-z]{3})\s+BALANCE B\/F\s+([\d,]+\.\d{2})$/i);
+
+      if (balanceForwardMatch) {
+        finishActiveTransaction();
+        previousBalanceCents = parseLooseAmount(balanceForwardMatch[3]);
+        continue;
+      }
+
+      const transactionMatch = line.match(
+        /^(\d{2})\s+([A-Za-z]{3})\s+(.+?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/,
+      );
+
+      if (transactionMatch) {
+        finishActiveTransaction();
+
+        const postedAt = parseUobPostedAt(transactionMatch[1], transactionMatch[2], statementPeriodEnd);
+        const amountCents = parseLooseAmount(transactionMatch[4]);
+        const balanceCents = parseLooseAmount(transactionMatch[5]);
+
+        if (!postedAt || amountCents === 0 || balanceCents === 0) {
+          continue;
+        }
+
+        let isDeposit = false;
+
+        if (previousBalanceCents !== null) {
+          if (Math.abs(previousBalanceCents - amountCents - balanceCents) <= 1) {
+            isDeposit = false;
+          } else if (Math.abs(previousBalanceCents + amountCents - balanceCents) <= 1) {
+            isDeposit = true;
+          }
+        }
+
+        activeTransaction = {
+          amountCents,
+          balanceCents,
+          descriptionParts: [transactionMatch[3]],
+          isDeposit,
+          pageNumber: page.pageNumber,
+          postedAt,
+          rawAmount: transactionMatch[4],
+          rawBalance: transactionMatch[5],
+        };
+        previousBalanceCents = balanceCents;
+        continue;
+      }
+
+      if (activeTransaction && !/^Page\s+\d+\s+of\s+\d+$/i.test(line)) {
+        activeTransaction.descriptionParts.push(line);
+      }
+    }
+  }
+
+  finishActiveTransaction();
+
+  if (parsedTransactions.length === 0) {
+    throw new Error("The PDF was saved, but I could not recognize any UOB account transaction rows inside it yet.");
+  }
+
+  return {
+    parserKey: "uob-account-pdf-v1",
+    parsedTransactions,
+    resolvedIdentity: {
+      accountLabel,
+      bankName: "UOB",
+    },
+  };
+}
+
+function parseCitibankPdf(buffer: Buffer): StatementParseResult {
+  const pages = extractPdfPages(buffer);
+
+  if (pages.length === 0) {
+    throw new Error("The PDF was saved, but I could not read a recognizable Citibank text layout from it.");
+  }
+
+  const allLines = pages.flatMap((page) => page.lines);
+  const statementDate = parseCitibankStatementDate(allLines);
+
+  if (!statementDate) {
+    throw new Error("The PDF was saved, but I could not find the Citibank statement date needed to anchor transaction years.");
+  }
+
+  const parsedTransactions: ImportedParsedTransaction[] = [];
+  let activeAccountName: string | null = null;
+  let activeAccountLabel: string | null = null;
+  let insideTransactionTable = false;
+
+  for (const page of pages) {
+    for (const line of page.lines) {
+      const compactLine = line.replace(/\s+/g, "");
+      const accountHeaderMatch = compactLine.match(/^(CITI[A-Z]+(?:MASTERCARD|MASTER))\d{16}PaymentDueDate:/i);
+
+      if (accountHeaderMatch) {
+        activeAccountName = accountHeaderMatch[1].toUpperCase();
+        activeAccountLabel = resolveCitibankAccountLabel(activeAccountName);
+      }
+
+      const transactionsForMatch = compactLine.match(/^TRANSACTIONSFOR(CITI[A-Z]+(?:MASTERCARD|MASTER))$/i);
+
+      if (transactionsForMatch) {
+        activeAccountName = transactionsForMatch[1].toUpperCase();
+        activeAccountLabel = resolveCitibankAccountLabel(activeAccountName);
+        continue;
+      }
+
+      if (compactLine.includes("DATEDESCRIPTIONAMOUNT(SGD)")) {
+        insideTransactionTable = true;
+        continue;
+      }
+
+      if (/^SUB-TOTAL:/i.test(compactLine)) {
+        continue;
+      }
+
+      if (/^GRANDTOTAL/i.test(compactLine)) {
+        insideTransactionTable = false;
+        continue;
+      }
+
+      if (!insideTransactionTable) {
+        continue;
+      }
+
+      const transactionMatch = line.match(
+        /^(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(.+?)\s+(\(?[\d,]+\.\d{2}\)?)$/i,
+      );
+
+      if (!transactionMatch) {
+        continue;
+      }
+
+      const postedAt = parseCitibankPostedAt(transactionMatch[1], transactionMatch[2], statementDate);
+      const rawDescription = collapseWhitespace(transactionMatch[3]);
+      const amountCents = parseLooseAmount(transactionMatch[4]);
+
+      if (!postedAt || !rawDescription || amountCents === 0) {
+        continue;
+      }
+
+      const merchantSource = deriveMerchantFromDescription(rawDescription);
+      const normalizedMerchant = normalizeMerchant(merchantSource || rawDescription);
+      const merchantName = activeAccountLabel && /PAYMENT/i.test(rawDescription)
+        ? activeAccountLabel
+        : prettifyMerchant(merchantSource || rawDescription);
+
+      if (!normalizedMerchant) {
+        continue;
+      }
+
+      const transactionKind = inferTransactionKind(rawDescription, amountCents);
+
+      parsedTransactions.push({
+        amountCents: normalizeTransactionAmount(transactionKind, amountCents),
+        currency: "SGD",
+        merchantName,
+        normalizedMerchant,
+        postedAt,
+        rawDescription,
+        rawRowJson: JSON.stringify({
+          account: activeAccountLabel,
+          amount: transactionMatch[4],
+          pageNumber: page.pageNumber,
+          statementDate: statementDate.isoDate,
+        }),
+        transactionKind,
+      });
+    }
+  }
+
+  if (parsedTransactions.length === 0) {
+    throw new Error("The PDF was saved, but I could not recognize any Citibank transaction rows inside it yet.");
+  }
+
+  return {
+    parserKey: "citibank-pdf-v1",
+    parsedTransactions,
+    resolvedIdentity: {
+      accountLabel: activeAccountLabel,
+      bankName: "Citibank",
+    },
+  };
+}
+
 function normalizeSpreadsheetRow(row: Record<string, unknown>) {
   const normalizedRow: TabularRecord = {};
 
@@ -548,6 +1145,13 @@ function detectStatementParser(input: StatementImportInput, extension: string) {
   const fileName = input.file.name.toLowerCase();
 
   if (
+    PDF_EXTENSIONS.has(extension) &&
+    fileName.startsWith("estatement")
+  ) {
+    return "citibank-card-pdf";
+  }
+
+  if (
     SPREADSHEET_EXTENSIONS.has(extension) &&
     fileName.startsWith("cc_txn_history")
   ) {
@@ -562,6 +1166,10 @@ function resolveStatementIdentity(statementParser: StatementParserType) {
 }
 
 function detectImportMode(extension: string, mimeType: string) {
+  if (PDF_EXTENSIONS.has(extension) || PDF_MIME_TYPES.has(mimeType)) {
+    return "pdf";
+  }
+
   if (CSV_EXTENSIONS.has(extension) || CSV_MIME_TYPES.has(mimeType)) {
     return "csv";
   }
@@ -641,6 +1249,7 @@ function formatPlural(count: number, singular: string, plural = `${singular}s`) 
 }
 
 function buildImportSummary(input: {
+  depositCount: number;
   paymentCount: number;
   transactionCount: number;
   uncategorizedCount: number;
@@ -650,6 +1259,12 @@ function buildImportSummary(input: {
   if (input.paymentCount > 0) {
     parts.push(
       `${formatPlural(input.paymentCount, "card payment row")} will stay out of spend and review.`,
+    );
+  }
+
+  if (input.depositCount > 0) {
+    parts.push(
+      `${formatPlural(input.depositCount, "deposit row")} will stay out of spend and review.`,
     );
   }
 
@@ -699,9 +1314,32 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
 
   let parsedTransactions: ImportedParsedTransaction[];
   let parserKey = "generic-csv-v1";
+  let resolvedIdentity: ParsedStatementIdentity = {
+    accountLabel: identity.accountLabel,
+    bankName: identity.bankName,
+  };
 
   try {
-    if (importMode === "spreadsheet") {
+    if (importMode === "pdf") {
+      const contents = await fs.readFile(destination);
+      let parsed: StatementParseResult;
+
+      if (statementParser === "uob-account-pdf") {
+        parsed = parseUobBankAccountPdf(contents);
+      } else if ((input.statementType ?? "auto") === "auto") {
+        try {
+          parsed = parseCitibankPdf(contents);
+        } catch {
+          parsed = parseUobBankAccountPdf(contents);
+        }
+      } else {
+        parsed = parseCitibankPdf(contents);
+      }
+
+      parsedTransactions = parsed.parsedTransactions;
+      parserKey = parsed.parserKey;
+      resolvedIdentity = parsed.resolvedIdentity ?? identity;
+    } else if (importMode === "spreadsheet") {
       const contents = await fs.readFile(destination);
       if (statementParser === "uob-card-xls") {
         parsedTransactions = parseUobSpreadsheet(contents);
@@ -715,11 +1353,13 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
       parsedTransactions = parseGenericCsv(contents);
     }
   } catch (error) {
-    if (importMode === "spreadsheet") {
+    if (importMode === "spreadsheet" || importMode === "pdf") {
       const reason =
         error instanceof Error
           ? error.message
-          : "The spreadsheet was saved, but could not be imported automatically.";
+          : importMode === "pdf"
+            ? "The PDF was saved, but could not be imported automatically."
+            : "The spreadsheet was saved, but could not be imported automatically.";
 
       storeStatementOnly(input, identity, statementId, fileName, importedAt, fallbackStatementMonth, reason);
 
@@ -776,17 +1416,23 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
 
   let uncategorizedCount = 0;
   let paymentCount = 0;
+  let depositCount = 0;
   const statementMonth = deriveStatementMonth(parsedTransactions) ?? fallbackStatementMonth;
 
   const transaction = db.transaction(() => {
     insertStatement.run(
       statementId,
-      identity.bankName,
-      identity.accountLabel,
+      resolvedIdentity.bankName,
+      resolvedIdentity.accountLabel,
       statementMonth,
       fileName,
       input.file.name,
-      input.file.type || (importMode === "spreadsheet" ? "application/vnd.ms-excel" : "text/csv"),
+      input.file.type ||
+        (importMode === "spreadsheet"
+          ? "application/vnd.ms-excel"
+          : importMode === "pdf"
+            ? "application/pdf"
+            : "text/csv"),
       parserKey,
       "imported",
       importedAt,
@@ -812,6 +1458,10 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
         paymentCount += 1;
       }
 
+      if (parsedTransaction.transactionKind === "deposit") {
+        depositCount += 1;
+      }
+
       insertTransaction.run(
         randomUUID(),
         statementId,
@@ -832,6 +1482,7 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
 
     db.prepare("UPDATE statements SET notes = ? WHERE id = ?").run(
       buildImportSummary({
+        depositCount,
         paymentCount,
         transactionCount: parsedTransactions.length,
         uncategorizedCount,
@@ -844,6 +1495,7 @@ export async function importStatement(input: StatementImportInput): Promise<Stat
 
   return {
     message: buildImportSummary({
+      depositCount,
       paymentCount,
       transactionCount: parsedTransactions.length,
       uncategorizedCount,

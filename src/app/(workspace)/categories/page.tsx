@@ -9,8 +9,21 @@ import {
   MessageBanner,
   PageHeader,
   SectionCard,
+  SummaryCard,
+  buttonLinkClassName,
+  chipClassName,
+  workspaceCardGridClassName,
+  workspaceCategoryCreateClassName,
+  workspaceCategoryEditClassName,
+  workspaceDeleteRowClassName,
+  workspaceHeaderActionsClassName,
+  workspacePageStackClassName,
+  workspaceSectionCopyClassName,
 } from "@/app/(workspace)/_components/workspace-ui";
 import { getCategoryManagementData } from "@/lib/expenses";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 type CategoriesPageProps = {
   searchParams?: Promise<{
@@ -24,17 +37,17 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
   const data = getCategoryManagementData();
 
   return (
-    <div className="page-stack">
+    <div className={workspacePageStackClassName}>
       <PageHeader
         eyebrow="Categories"
         title="Shape the category system without losing review discipline."
         description="Add new buckets, rename old ones, and retire categories cleanly. Deleting a category clears its merchant memory and sends matching transactions back to review so nothing stays misclassified."
         actions={
-          <div className="header-actions">
-            <Link href="/review" className="secondary-button">
+          <div className={workspaceHeaderActionsClassName}>
+            <Link href="/review" className={buttonLinkClassName({ variant: "outline" })}>
               Open review
             </Link>
-            <Link href="/" className="primary-button">
+            <Link href="/" className={buttonLinkClassName({ variant: "outline" })}>
               Back to overview
             </Link>
           </div>
@@ -43,24 +56,22 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
 
       <MessageBanner message={message} />
 
-      <section className="summary-band">
-        <article className="summary-item">
-          <p className="eyebrow">Categories</p>
-          <p className="summary-value">{data.summary.categoryCount}</p>
-          <p className="summary-copy">Every spending bucket currently available across review and month pages.</p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Saved rules</p>
-          <p className="summary-value">{data.summary.ruleCount}</p>
-          <p className="summary-copy">Reusable merchant memory entries attached to the category library.</p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Categorized rows</p>
-          <p className="summary-value">{data.summary.categorizedTransactionCount}</p>
-          <p className="summary-copy">Reviewable transactions currently assigned to one of these categories.</p>
-        </article>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <SummaryCard
+          eyebrow="Categories"
+          value={data.summary.categoryCount}
+          description="Every spending bucket currently available across review and month pages."
+        />
+        <SummaryCard
+          eyebrow="Saved rules"
+          value={data.summary.ruleCount}
+          description="Reusable merchant memory entries attached to the category library."
+        />
+        <SummaryCard
+          eyebrow="Categorized rows"
+          value={data.summary.categorizedTransactionCount}
+          description="Reviewable transactions currently assigned to one of these categories."
+        />
       </section>
 
       <SectionCard
@@ -68,20 +79,34 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
         title="Create a new category"
         description="New categories appear immediately anywhere you can classify spend."
       >
-        <form action={createCategoryAction} className="category-create-form">
-          <label className="category-field-stack">
-            <span className="field-label">Name</span>
-            <input type="text" name="name" className="field" placeholder="Pet care" maxLength={60} required />
-          </label>
-          <label className="category-field-stack">
-            <span className="field-label">Color</span>
-            <input type="color" name="color" defaultValue="#607744" className="color-field" required />
-          </label>
-          <div className="category-create-actions">
-            <button type="submit" className="primary-button">
-              Add category
-            </button>
-          </div>
+        <form action={createCategoryAction}>
+          <FieldGroup className={workspaceCategoryCreateClassName}>
+            <Field className="grid gap-2">
+              <FieldLabel htmlFor="new-category-name">Name</FieldLabel>
+              <Input
+                id="new-category-name"
+                type="text"
+                name="name"
+                placeholder="Pet care"
+                maxLength={60}
+                required
+              />
+            </Field>
+            <Field className="grid gap-2">
+              <FieldLabel htmlFor="new-category-color">Color</FieldLabel>
+              <Input
+                id="new-category-color"
+                type="color"
+                name="color"
+                defaultValue="#607744"
+                className="h-12 w-20 p-1"
+                required
+              />
+            </Field>
+            <div className="flex items-end">
+              <Button type="submit">Add category</Button>
+            </div>
+          </FieldGroup>
         </form>
       </SectionCard>
 
@@ -91,52 +116,71 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
         description="Updating a category keeps its history intact. Deleting one removes its merchant rules and returns affected spend to review."
       >
         {data.categories.length > 0 ? (
-          <div className="category-library">
+          <div className={workspaceCardGridClassName}>
             {data.categories.map((category) => (
-              <article key={category.id} className="category-row">
-                <div className="category-row-header">
-                  <div className="space-y-2">
+              <article key={category.id} className="grid gap-4 rounded-[24px] border bg-card p-5 shadow-sm">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="category-swatch" style={{ backgroundColor: category.color }} />
-                      <p className="font-semibold text-stone-900">{category.name}</p>
-                      <span className="chip">ID: {category.id}</span>
+                      <span className="size-4 rounded-full border" style={{ backgroundColor: category.color }} />
+                      <p className="font-semibold text-foreground">{category.name}</p>
+                      <span className={chipClassName()}>ID: {category.id}</span>
                     </div>
-                    <div className="category-stats">
-                      <span className="chip">
+                    <div className="flex flex-wrap gap-2">
+                      <span className={chipClassName()}>
                         {category.ruleCount} rule{category.ruleCount === 1 ? "" : "s"}
                       </span>
-                      <span className="chip">
+                      <span className={chipClassName()}>
                         {category.categorizedTransactionCount} row
                         {category.categorizedTransactionCount === 1 ? "" : "s"}
                       </span>
                     </div>
                   </div>
-                  <p className="section-copy">Order {category.sortOrder}</p>
+                  <p className={workspaceSectionCopyClassName}>Order {category.sortOrder}</p>
                 </div>
 
-                <form action={updateCategoryAction} className="category-edit-form">
+                <form
+                  key={`${category.id}:${category.name}:${category.color}`}
+                  action={updateCategoryAction}
+                >
                   <input type="hidden" name="categoryId" value={category.id} />
-                  <label className="category-field-stack">
-                    <span className="field-label">Name</span>
-                    <input type="text" name="name" defaultValue={category.name} className="field" maxLength={60} required />
-                  </label>
-                  <label className="category-field-stack">
-                    <span className="field-label">Color</span>
-                    <input type="color" name="color" defaultValue={category.color} className="color-field" required />
-                  </label>
-                  <button type="submit" className="secondary-button">
-                    Save changes
-                  </button>
+                  <FieldGroup className={workspaceCategoryEditClassName}>
+                    <Field className="grid gap-2">
+                      <FieldLabel htmlFor={`name-${category.id}`}>Name</FieldLabel>
+                      <Input
+                        id={`name-${category.id}`}
+                        type="text"
+                        name="name"
+                        defaultValue={category.name}
+                        maxLength={60}
+                        required
+                      />
+                    </Field>
+                    <Field className="grid gap-2">
+                      <FieldLabel htmlFor={`color-${category.id}`}>Color</FieldLabel>
+                      <Input
+                        id={`color-${category.id}`}
+                        type="color"
+                        name="color"
+                        defaultValue={category.color}
+                        className="h-12 w-20 p-1"
+                        required
+                      />
+                    </Field>
+                    <Button type="submit" variant="outline">
+                      Save changes
+                    </Button>
+                  </FieldGroup>
                 </form>
 
-                <form action={deleteCategoryAction} className="category-delete-form">
+                <form action={deleteCategoryAction} className={workspaceDeleteRowClassName}>
                   <input type="hidden" name="categoryId" value={category.id} />
-                  <p className="section-copy">
+                  <p className={workspaceSectionCopyClassName}>
                     Delete this category if you want every merchant and transaction tied to it to return to review.
                   </p>
-                  <button type="submit" className="danger-button compact-button">
+                  <Button type="submit" variant="destructive" size="sm">
                     Delete category
-                  </button>
+                  </Button>
                 </form>
               </article>
             ))}

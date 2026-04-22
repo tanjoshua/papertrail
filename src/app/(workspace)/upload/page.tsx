@@ -11,7 +11,32 @@ import {
   PageHeader,
   SectionCard,
   StatementStatusBadge,
+  SummaryCard,
+  buttonLinkClassName,
+  chipClassName,
+  textLinkClassName,
+  workspaceBalancedGridClassName,
+  workspaceHeaderActionsClassName,
+  workspacePageStackClassName,
+  workspaceSectionCopyClassName,
+  workspaceStackListClassName,
+  workspaceSurfaceRowClassName,
+  workspaceTwoSummaryGridClassName,
+  workspaceFormGridClassName,
+  workspaceFormFooterClassName,
 } from "@/app/(workspace)/_components/workspace-ui";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 
 type UploadPageProps = {
   searchParams?: Promise<{
@@ -39,17 +64,17 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   const data = getUploadPageData(selectedStatement);
 
   return (
-    <div className="page-stack">
+    <div className={workspacePageStackClassName}>
       <PageHeader
         eyebrow="Upload"
         title="Bring in statements without losing how they span banks or months."
         description="Statements remain visible as imported files with an auto-derived cycle label, while the month pages are generated from the posted dates inside the statement rows."
         actions={
-          <div className="header-actions">
-            <Link href="/statements" className="secondary-button">
+          <div className={workspaceHeaderActionsClassName}>
+            <Link href="/statements" className={buttonLinkClassName({ variant: "outline" })}>
               View all statements
             </Link>
-            <Link href="/" className="primary-button">
+            <Link href="/" className={buttonLinkClassName({ variant: "outline" })}>
               Back to overview
             </Link>
           </div>
@@ -58,46 +83,44 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
 
       <MessageBanner message={message} />
 
-      <section className="content-grid content-grid-balanced">
+      <section className={workspaceBalancedGridClassName}>
         <SectionCard
           eyebrow="Import Form"
           title="Add a new bank statement"
           description="Pick the statement type first, then upload the file. The app will derive the bank/card identity from that type and use the matching parser."
         >
-          <form action={uploadStatementAction} className="form-grid">
-            <label className="space-y-2">
-              <span className="field-label">Statement type</span>
-              <select name="statementType" className="field" defaultValue="auto">
-                {STATEMENT_PARSER_TYPES.map((statementType) => (
-                  <option key={statementType} value={statementType}>
-                    {STATEMENT_PARSER_DETAILS[statementType].label}
-                  </option>
-                ))}
-              </select>
-              <p className="section-copy">
-                {STATEMENT_PARSER_DETAILS.auto.hint}
-              </p>
-            </label>
+          <form action={uploadStatementAction}>
+            <FieldGroup className={workspaceFormGridClassName}>
+              <Field>
+                <FieldLabel htmlFor="statementType">Statement type</FieldLabel>
+                <NativeSelect id="statementType" name="statementType" defaultValue="auto" className="w-full">
+                  {STATEMENT_PARSER_TYPES.map((statementType) => (
+                    <NativeSelectOption key={statementType} value={statementType}>
+                      {STATEMENT_PARSER_DETAILS[statementType].label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldDescription>{STATEMENT_PARSER_DETAILS.auto.hint}</FieldDescription>
+              </Field>
 
-            <label className="space-y-2">
-              <span className="field-label">Statement file</span>
-              <input
-                type="file"
-                name="statement"
-                accept=".csv,.xls,.xlsx,.pdf,text/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="field file-field"
-                required
-              />
-            </label>
+              <Field>
+                <FieldLabel htmlFor="statement">Statement file</FieldLabel>
+                <Input
+                  id="statement"
+                  type="file"
+                  name="statement"
+                  accept=".csv,.xls,.xlsx,.pdf,text/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  required
+                />
+              </Field>
 
-            <div className="form-footer">
-              <button type="submit" className="primary-button">
-                Import statement
-              </button>
-              <p className="section-copy">
-                Start with Auto-detect. If you know the exact export type, choose it directly and the app will fill in the bank/card identity from that type.
-              </p>
-            </div>
+              <div className={workspaceFormFooterClassName}>
+                <Button type="submit">Import statement</Button>
+                <p className={workspaceSectionCopyClassName}>
+                  Start with Auto-detect. If you know the exact export type, choose it directly and the app will fill in the bank/card identity from that type.
+                </p>
+              </div>
+            </FieldGroup>
           </form>
         </SectionCard>
 
@@ -111,75 +134,82 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
           }
         >
           {data.focusStatement ? (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-center gap-3">
-                <p className="font-semibold text-stone-900">
+                <p className="font-semibold text-foreground">
                   {data.focusStatement.bankName}
                   {data.focusStatement.accountLabel ? ` / ${data.focusStatement.accountLabel}` : ""}
                 </p>
                 <StatementStatusBadge status={data.focusStatement.status} />
               </div>
-              <p className="section-copy">
+              <p className={workspaceSectionCopyClassName}>
                 Derived cycle label {formatMonthLabel(data.focusStatement.cycleMonth)} / {data.focusStatement.originalFileName}
               </p>
-              <p className="section-copy">{formatDateRange(data.focusStatement.firstPostedAt, data.focusStatement.lastPostedAt)}</p>
-              <div className="chip-row">
+              <p className={workspaceSectionCopyClassName}>{formatDateRange(data.focusStatement.firstPostedAt, data.focusStatement.lastPostedAt)}</p>
+              <div className="flex flex-wrap gap-3">
                 {data.focusStatement.monthsTouched.map((month) => (
-                  <Link key={month} href={`/months/${month}`} className="chip">
+                  <Link key={month} href={`/months/${month}`} className={chipClassName()}>
                     {formatMonthLabel(month)}
                   </Link>
                 ))}
               </div>
-              <div className="summary-band summary-band-tight">
-                <article className="summary-item">
-                  <p className="eyebrow">Transactions</p>
-                  <p className="summary-value">{data.focusStatement.transactionCount}</p>
-                </article>
-                <article className="summary-item">
-                  <p className="eyebrow">Needs review</p>
-                  <p className="summary-value">{data.focusStatement.pendingCount}</p>
-                </article>
+              <div className={workspaceTwoSummaryGridClassName}>
+                <SummaryCard
+                  eyebrow="Transactions"
+                  value={data.focusStatement.transactionCount}
+                  description="Rows parsed from this uploaded statement."
+                />
+                <SummaryCard
+                  eyebrow="Needs review"
+                  value={data.focusStatement.pendingCount}
+                  description="Transactions from this statement still waiting on merchant memory."
+                />
               </div>
               {data.focusStatement.paymentCents > 0 ? (
-                <p className="section-copy">
+                <p className={workspaceSectionCopyClassName}>
                   {formatCurrency(data.focusStatement.paymentCents)} in card payments was recognized automatically and kept out of spend.
                 </p>
               ) : null}
-              <div className="header-actions">
+              {data.focusStatement.depositCents > 0 ? (
+                <p className={workspaceSectionCopyClassName}>
+                  {formatCurrency(data.focusStatement.depositCents)} in deposits was recognized automatically and kept out of spend and review.
+                </p>
+              ) : null}
+              <div className={workspaceHeaderActionsClassName}>
                 {data.focusStatement.monthsTouched[0] ? (
-                  <Link href={`/months/${data.focusStatement.monthsTouched[0]}`} className="primary-button">
+                  <Link href={`/months/${data.focusStatement.monthsTouched[0]}`} className={buttonLinkClassName()}>
                     Open touched month
                   </Link>
                 ) : null}
-                <Link href="/review" className="secondary-button">
+                <Link href="/review" className={buttonLinkClassName({ variant: "outline" })}>
                   Open review queue
                 </Link>
                 <DeleteStatementForm returnTo="/upload" statementId={data.focusStatement.id} />
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="stack-list">
-                <div className="import-row">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-stone-900">Statement imports stay traceable</p>
-                    <p className="section-copy">
+            <div className="flex flex-col gap-4">
+              <div className={workspaceStackListClassName}>
+                <div className={workspaceSurfaceRowClassName}>
+                  <div className="flex flex-col gap-1">
+                    <p className="font-semibold text-foreground">Statement imports stay traceable</p>
+                    <p className={workspaceSectionCopyClassName}>
                       You can always see which file created which transactions and which months the file touched.
                     </p>
                   </div>
                 </div>
-                <div className="import-row">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-stone-900">Month pages stay truthful</p>
-                    <p className="section-copy">
+                <div className={workspaceSurfaceRowClassName}>
+                  <div className="flex flex-col gap-1">
+                    <p className="font-semibold text-foreground">Month pages stay truthful</p>
+                    <p className={workspaceSectionCopyClassName}>
                       UOB-style statements that span two months automatically contribute to both month pages.
                     </p>
                   </div>
                 </div>
-                <div className="import-row">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-stone-900">Review stays its own workflow</p>
-                    <p className="section-copy">
+                <div className={workspaceSurfaceRowClassName}>
+                  <div className="flex flex-col gap-1">
+                    <p className="font-semibold text-foreground">Review stays its own workflow</p>
+                    <p className={workspaceSectionCopyClassName}>
                       Unknown merchants go to review instead of competing with the analysis screens for attention.
                     </p>
                   </div>
@@ -188,9 +218,9 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
 
               {data.stats.statementCount === 0 ? (
                 <form action={loadDemoDataAction}>
-                  <button type="submit" className="secondary-button">
+                  <Button type="submit" variant="outline">
                     Load demo workspace
-                  </button>
+                  </Button>
                 </form>
               ) : null}
             </div>
@@ -203,36 +233,36 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
         title="Statement history from the upload surface"
         description="You do not have to leave upload just to verify what was already added."
         action={
-          <Link href="/statements" className="sidebar-link">
+          <Link href="/statements" className={textLinkClassName()}>
             Open statement history
           </Link>
         }
       >
         {data.recentStatements.length > 0 ? (
-          <div className="stack-list">
+          <div className={workspaceStackListClassName}>
             {data.recentStatements.map((statement) => (
-              <div key={statement.id} className="statement-row">
-                <div className="space-y-2">
+              <div key={statement.id} className={workspaceSurfaceRowClassName}>
+                <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="font-semibold text-stone-900">
+                    <p className="font-semibold text-foreground">
                       {statement.bankName}
                       {statement.accountLabel ? ` / ${statement.accountLabel}` : ""}
                     </p>
                     <StatementStatusBadge status={statement.status} />
                   </div>
-                  <p className="section-copy">
+                  <p className={workspaceSectionCopyClassName}>
                     Derived cycle label {formatMonthLabel(statement.cycleMonth)} / {statement.originalFileName}
                   </p>
                 </div>
-                <div className="chip-row">
+                <div className="flex flex-wrap gap-3">
                   {statement.monthsTouched.length > 0 ? (
                     statement.monthsTouched.map((month) => (
-                      <Link key={month} href={`/months/${month}`} className="chip">
+                      <Link key={month} href={`/months/${month}`} className={chipClassName()}>
                         {formatMonthLabel(month)}
                       </Link>
                     ))
                   ) : (
-                    <span className="chip">Stored only</span>
+                    <span className={chipClassName()}>Stored only</span>
                   )}
                   <DeleteStatementForm returnTo="/upload" statementId={statement.id} />
                 </div>

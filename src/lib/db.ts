@@ -157,13 +157,14 @@ function ensureTransactionKindColumn(connection: BetterSqliteDatabase) {
     for (const row of rowsToNormalize) {
       const nextKind = inferTransactionKind(row.rawDescription, row.amountCents);
       const nextAmountCents = normalizeTransactionAmount(nextKind, row.amountCents);
-      const nextCategoryId = nextKind === "payment" ? null : row.categoryId;
-      const nextCategorySource = nextKind === "payment" ? "not_applicable" : row.categorySource;
+      const nextCategoryId = nextKind === "payment" || nextKind === "deposit" ? null : row.categoryId;
+      const nextCategorySource = nextKind === "payment" || nextKind === "deposit" ? "not_applicable" : row.categorySource;
       const needsKindNormalization =
         row.transactionKind === null || !TRANSACTION_KINDS.includes(row.transactionKind as (typeof TRANSACTION_KINDS)[number]);
       const needsAmountNormalization = nextAmountCents !== row.amountCents;
       const needsPaymentCleanup =
-        nextKind === "payment" && (row.categoryId !== null || row.categorySource !== "not_applicable");
+        (nextKind === "payment" || nextKind === "deposit") &&
+        (row.categoryId !== null || row.categorySource !== "not_applicable");
       const needsKindUpdate = needsKindNormalization || row.transactionKind !== nextKind;
 
       if (!needsKindUpdate && !needsAmountNormalization && !needsPaymentCleanup) {

@@ -8,7 +8,41 @@ import {
   PageHeader,
   SectionCard,
   TransactionKindBadge,
+  SummaryCard,
+  buttonLinkClassName,
+  chipClassName,
+  textLinkClassName,
+  workspaceCardGridClassName,
+  workspaceHeaderActionsClassName,
+  workspacePageStackClassName,
+  workspaceSectionCopyClassName,
+  workspaceStackListTightClassName,
+  workspaceStatTextClassName,
+  workspaceTabsGridClassName,
+  workspaceTabActiveClassName,
+  workspaceTabClassName,
+  workspaceTabCountClassName,
+  workspaceTabMetaClassName,
+  workspaceCategoryBlockClassName,
+  workspaceSectionTitleClassName,
+  workspaceSummaryGridClassName,
+  workspaceFormTwoColumnClassName,
 } from "@/app/(workspace)/_components/workspace-ui";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type ReviewPageProps = {
   searchParams?: Promise<{
@@ -68,21 +102,21 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   const visibleUsageCount = visibleRuleGroups.reduce((total, group) => total + group.usageCount, 0);
 
   return (
-    <div className="page-stack">
+    <div className={workspacePageStackClassName}>
       <PageHeader
         eyebrow="Review"
         title="Teach the app merchant memory instead of fixing the same thing over and over."
         description="The review page groups uncategorized merchants so the highest-value action is obvious: save a reusable rule when the merchant pattern is stable, then revisit one-off oddities from the month page only when needed."
         actions={
-          <div className="header-actions">
-            <Link href="/categories" className="secondary-button">
+          <div className={workspaceHeaderActionsClassName}>
+            <Link href="/categories" className={buttonLinkClassName({ variant: "outline" })}>
               Manage categories
             </Link>
-            <Link href="/upload" className="secondary-button">
+            <Link href="/upload" className={buttonLinkClassName({ variant: "outline" })}>
               Upload more
             </Link>
             {data.selectedMonth ? (
-              <Link href={`/months/${data.selectedMonth}`} className="primary-button">
+              <Link href={`/months/${data.selectedMonth}`} className={buttonLinkClassName()}>
                 Open month page
               </Link>
             ) : null}
@@ -92,38 +126,27 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
 
       <MessageBanner message={message} />
 
-      <section className="summary-band">
-        <article className="summary-item">
-          <p className="eyebrow">Scope</p>
-          <p className="summary-value">
-            {data.selectedMonth ? formatMonthLabel(data.selectedMonth) : "All months"}
-          </p>
-          <p className="summary-copy">Filter the queue to a single month when you want to clear a specific reconciliation window.</p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Merchant groups</p>
-          <p className="summary-value">{data.summary.pendingMerchantCount}</p>
-          <p className="summary-copy">
-            Grouping by normalized merchant keeps repeated unknowns from scattering across the UI.
-          </p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Pending rows</p>
-          <p className="summary-value">{data.summary.pendingTransactionCount}</p>
-          <p className="summary-copy">
-            These are the individual transactions that still need a category decision.
-          </p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Unclassified spend</p>
-          <p className="summary-value">{formatCurrency(data.summary.totalSpendCents)}</p>
-          <p className="summary-copy">
-            Payments are already excluded, so this reflects real spend still waiting on a category.
-          </p>
-        </article>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          eyebrow="Scope"
+          value={data.selectedMonth ? formatMonthLabel(data.selectedMonth) : "All months"}
+          description="Filter the queue to a single month when you want to clear a specific reconciliation window."
+        />
+        <SummaryCard
+          eyebrow="Merchant groups"
+          value={data.summary.pendingMerchantCount}
+          description="Grouping by normalized merchant keeps repeated unknowns from scattering across the UI."
+        />
+        <SummaryCard
+          eyebrow="Pending rows"
+          value={data.summary.pendingTransactionCount}
+          description="These are the individual transactions that still need a category decision."
+        />
+        <SummaryCard
+          eyebrow="Unclassified spend"
+          value={formatCurrency(data.summary.totalSpendCents)}
+          description="Payments are already excluded, so this reflects real spend still waiting on a category."
+        />
       </section>
 
       <SectionCard
@@ -131,11 +154,11 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         title="Focus the review queue"
         description="Choose all months or zoom into one month page's unresolved merchants."
       >
-        <div className="chip-row">
+        <div className="flex flex-wrap gap-3">
           <Link
             href={getReviewHref({ memoryCategory: data.selectedRuleCategoryId, month: null })}
             scroll={false}
-            className={!data.selectedMonth ? "chip chip-active" : "chip"}
+            className={chipClassName({ active: !data.selectedMonth })}
           >
             All months
           </Link>
@@ -144,7 +167,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
               key={month}
               href={getReviewHref({ memoryCategory: data.selectedRuleCategoryId, month })}
               scroll={false}
-              className={data.selectedMonth === month ? "chip chip-active" : "chip"}
+              className={chipClassName({ active: data.selectedMonth === month })}
             >
               {formatMonthLabel(month)}
             </Link>
@@ -158,63 +181,76 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         description="Use the reusable action here first. If a merchant is truly one-off, jump to the month page from one of its transactions."
       >
         {data.reviewQueue.length > 0 ? (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {data.reviewQueue.map((group) => (
-              <article key={group.normalizedMerchant} className="review-group-card">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-stone-900">{group.displayName}</p>
-                    <p className="section-copy">
+              <Card key={group.normalizedMerchant} size="sm">
+                <CardHeader>
+                  <CardTitle>{group.displayName}</CardTitle>
+                  <CardDescription className={workspaceSectionCopyClassName}>
                       {group.transactionCount} transaction{group.transactionCount === 1 ? "" : "s"} across {group.months.map(formatMonthLabel).join(", ")}
-                    </p>
-                  </div>
-                  <p className="transaction-amount">{formatCurrency(group.spendCents)}</p>
-                </div>
+                  </CardDescription>
+                  <CardAction className="text-lg font-semibold text-foreground">
+                    {formatCurrency(group.spendCents)}
+                  </CardAction>
+                </CardHeader>
 
-                <form action={assignCategoryAction} className="review-rule-form">
-                  <input type="hidden" name="transactionId" value={group.representativeTransactionId} />
-                  <input type="hidden" name="returnTo" value={returnTo} />
-                  <input type="hidden" name="scope" value="future" />
-                  <select name="categoryId" defaultValue="" className="field" required>
-                    <option value="" disabled>
-                      Save a reusable category
-                    </option>
-                    {data.categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="submit" className="primary-button">
-                    Save merchant rule
-                  </button>
-                </form>
+                <CardContent className="flex flex-col gap-4">
+                  <form action={assignCategoryAction}>
+                    <input type="hidden" name="transactionId" value={group.representativeTransactionId} />
+                    <input type="hidden" name="returnTo" value={returnTo} />
+                    <input type="hidden" name="scope" value="future" />
+                    <FieldGroup className={workspaceFormTwoColumnClassName}>
+                      <Field>
+                        <FieldLabel htmlFor={`review-category-${group.normalizedMerchant}`} className="sr-only">
+                          Save a reusable category
+                        </FieldLabel>
+                        <NativeSelect
+                          id={`review-category-${group.normalizedMerchant}`}
+                          name="categoryId"
+                          defaultValue=""
+                          className="w-full"
+                          required
+                        >
+                          <NativeSelectOption value="" disabled>
+                            Save a reusable category
+                          </NativeSelectOption>
+                          {data.categories.map((category) => (
+                            <NativeSelectOption key={category.id} value={category.id}>
+                              {category.name}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                      </Field>
+                      <Button type="submit">Save merchant rule</Button>
+                    </FieldGroup>
+                  </form>
 
-                <div className="stack-list stack-list-tight">
-                  {group.transactions.slice(0, 4).map((transaction) => (
-                    <div key={transaction.id} className="queue-transaction-row">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <p className="font-medium text-stone-900">{transaction.rawDescription}</p>
-                          {transaction.transactionKind !== "expense" ? (
-                            <TransactionKindBadge kind={transaction.transactionKind} />
-                          ) : null}
+                  <div className={workspaceStackListTightClassName}>
+                    {group.transactions.slice(0, 4).map((transaction) => (
+                      <div key={transaction.id} className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <p className="font-medium text-foreground">{transaction.rawDescription}</p>
+                            {transaction.transactionKind !== "expense" ? (
+                              <TransactionKindBadge kind={transaction.transactionKind} />
+                            ) : null}
+                          </div>
+                          <p className={workspaceSectionCopyClassName}>
+                            {formatDay(transaction.postedAt)} / {transaction.bankName}
+                            {transaction.accountLabel ? ` / ${transaction.accountLabel}` : ""} / {formatMonthLabel(transaction.month)}
+                          </p>
                         </div>
-                        <p className="section-copy">
-                          {formatDay(transaction.postedAt)} / {transaction.bankName}
-                          {transaction.accountLabel ? ` / ${transaction.accountLabel}` : ""} / {formatMonthLabel(transaction.month)}
-                        </p>
+                        <div className="flex items-center gap-3">
+                          <p className={workspaceStatTextClassName}>{formatCurrency(transaction.amountCents)}</p>
+                          <Link href={`/months/${transaction.month}`} className={textLinkClassName()}>
+                            Open month
+                          </Link>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <p className="queue-row-amount">{formatCurrency(transaction.amountCents)}</p>
-                        <Link href={`/months/${transaction.month}`} className="sidebar-link">
-                          Open month
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         ) : (
@@ -234,7 +270,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
             <Link
               href={getReviewHref({ memoryCategory: null, month: data.selectedMonth })}
               scroll={false}
-              className="sidebar-link"
+              className={textLinkClassName()}
             >
               Show all categories
             </Link>
@@ -242,21 +278,21 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         }
       >
         {data.ruleGroups.length > 0 ? (
-          <div className="memory-library">
-            <div className="memory-tab-strip" aria-label="Merchant memory categories">
+          <div className={workspaceCardGridClassName}>
+            <div className={workspaceTabsGridClassName} aria-label="Merchant memory categories">
               <Link
                 href={getReviewHref({ memoryCategory: null, month: data.selectedMonth })}
                 scroll={false}
-                className={!data.selectedRuleCategoryId ? "memory-tab memory-tab-active" : "memory-tab"}
+                className={!data.selectedRuleCategoryId ? `${workspaceTabClassName} ${workspaceTabActiveClassName}` : workspaceTabClassName}
                 aria-current={!data.selectedRuleCategoryId ? "page" : undefined}
               >
-                <div className="memory-tab-copy">
-                  <span className="memory-tab-label">All categories</span>
-                  <span className="memory-tab-meta">
+                <div className="grid gap-1">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-foreground">All categories</span>
+                  <span className={workspaceTabMetaClassName}>
                     {data.memorySummary.activeCategoryCount} active categor{data.memorySummary.activeCategoryCount === 1 ? "y" : "ies"}
                   </span>
                 </div>
-                <span className="memory-tab-count">{data.memorySummary.totalRuleCount}</span>
+                <span className={workspaceTabCountClassName}>{data.memorySummary.totalRuleCount}</span>
               </Link>
 
               {data.ruleGroups.map((group) => (
@@ -264,102 +300,112 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
                   key={group.categoryId}
                   href={getReviewHref({ memoryCategory: group.categoryId, month: data.selectedMonth })}
                   scroll={false}
-                  className={data.selectedRuleCategoryId === group.categoryId ? "memory-tab memory-tab-active" : "memory-tab"}
+                  className={data.selectedRuleCategoryId === group.categoryId ? `${workspaceTabClassName} ${workspaceTabActiveClassName}` : workspaceTabClassName}
                   aria-current={data.selectedRuleCategoryId === group.categoryId ? "page" : undefined}
                 >
-                  <div className="memory-tab-copy">
-                    <span className="memory-tab-label">
-                      <span className="memory-color-dot" style={{ backgroundColor: group.color }} />
+                  <div className="grid gap-1">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <span className="size-2.5 rounded-full border" style={{ backgroundColor: group.color }} />
                       {group.categoryName}
                     </span>
-                    <span className="memory-tab-meta">
+                    <span className={workspaceTabMetaClassName}>
                       seen {group.usageCount} time{group.usageCount === 1 ? "" : "s"}
                     </span>
                   </div>
-                  <span className="memory-tab-count">{group.ruleCount}</span>
+                  <span className={workspaceTabCountClassName}>{group.ruleCount}</span>
                 </Link>
               ))}
             </div>
 
-            <div className="memory-summary-grid">
-              <article className="memory-summary-item">
-                <p className="eyebrow">Scope</p>
-                <p className="memory-summary-value">{selectedRuleGroup ? selectedRuleGroup.categoryName : "All categories"}</p>
-                <p className="section-copy">
-                  {selectedRuleGroup
+            <div className={workspaceSummaryGridClassName}>
+              <SummaryCard
+                eyebrow="Scope"
+                value={selectedRuleGroup ? selectedRuleGroup.categoryName : "All categories"}
+                description={
+                  selectedRuleGroup
                     ? "A focused audit view for one category's reusable merchant memory."
-                    : "Browse the entire library first, then narrow down only when a category needs attention."}
-                </p>
-              </article>
+                    : "Browse the entire library first, then narrow down only when a category needs attention."
+                }
+              />
 
-              <article className="memory-summary-item">
-                <p className="eyebrow">Saved rules</p>
-                <p className="memory-summary-value">{visibleRuleCount}</p>
-                <p className="section-copy">
-                  Merchant memor{visibleRuleCount === 1 ? "y entry" : "y entries"} available in this view.
-                </p>
-              </article>
+              <SummaryCard
+                eyebrow="Saved rules"
+                value={visibleRuleCount}
+                description={`Merchant memor${visibleRuleCount === 1 ? "y entry" : "y entries"} available in this view.`}
+              />
 
-              <article className="memory-summary-item">
-                <p className="eyebrow">Historical matches</p>
-                <p className="memory-summary-value">{visibleUsageCount}</p>
-                <p className="section-copy">
-                  Past transactions that already map to these reusable decisions.
-                </p>
-              </article>
+              <SummaryCard
+                eyebrow="Historical matches"
+                value={visibleUsageCount}
+                description="Past transactions that already map to these reusable decisions."
+              />
             </div>
 
-            <div className="memory-category-stack">
+            <div className={workspaceCardGridClassName}>
               {visibleRuleGroups.map((group) => (
-                <section key={group.categoryId} className="memory-category-block">
+                <section key={group.categoryId} className={workspaceCategoryBlockClassName}>
                   {!selectedRuleGroup ? (
-                    <div className="memory-category-heading">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                       <div className="flex flex-wrap items-center gap-3">
-                        <span className="memory-color-dot" style={{ backgroundColor: group.color }} />
-                        <h3 className="memory-category-title">{group.categoryName}</h3>
-                        <span className="chip">
+                        <span className="size-2.5 rounded-full border" style={{ backgroundColor: group.color }} />
+                        <h3 className={workspaceSectionTitleClassName}>{group.categoryName}</h3>
+                        <Badge variant="outline">
                           {group.ruleCount} merchant{group.ruleCount === 1 ? "" : "s"}
-                        </span>
+                        </Badge>
                       </div>
-                      <p className="section-copy">
+                      <p className={workspaceSectionCopyClassName}>
                         Seen {group.usageCount} time{group.usageCount === 1 ? "" : "s"} across imported history.
                       </p>
                     </div>
                   ) : null}
 
-                  <div className="memory-rule-list">
+                  <div className={workspaceCardGridClassName}>
                     {group.rules.map((rule) => (
-                      <article key={rule.id} className="memory-rule-row">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <p className="font-semibold text-stone-900">{rule.displayName}</p>
-                            {selectedRuleGroup ? (
-                              <span className="chip">
-                                seen {rule.usageCount} time{rule.usageCount === 1 ? "" : "s"}
-                              </span>
-                            ) : null}
+                      <Card key={rule.id} size="sm">
+                        <CardContent className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] md:items-center">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <p className="font-semibold text-foreground">{rule.displayName}</p>
+                              {selectedRuleGroup ? (
+                                <Badge variant="outline">
+                                  seen {rule.usageCount} time{rule.usageCount === 1 ? "" : "s"}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <p className={workspaceSectionCopyClassName}>
+                              Matches <code>{rule.normalizedMerchant}</code> / seen {rule.usageCount} time
+                              {rule.usageCount === 1 ? "" : "s"}
+                            </p>
                           </div>
-                          <p className="section-copy">
-                            Matches <code>{rule.normalizedMerchant}</code> / seen {rule.usageCount} time
-                            {rule.usageCount === 1 ? "" : "s"}
-                          </p>
-                        </div>
 
-                        <form action={updateRuleAction} className="memory-rule-form">
-                          <input type="hidden" name="ruleId" value={rule.id} />
-                          <input type="hidden" name="returnTo" value={returnTo} />
-                          <select name="categoryId" defaultValue={rule.categoryId} className="field">
-                            {data.categories.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button type="submit" className="secondary-button">
-                            Update rule
-                          </button>
-                        </form>
-                      </article>
+                          <form action={updateRuleAction}>
+                            <input type="hidden" name="ruleId" value={rule.id} />
+                            <input type="hidden" name="returnTo" value={returnTo} />
+                            <FieldGroup className={workspaceFormTwoColumnClassName}>
+                              <Field>
+                                <FieldLabel htmlFor={`rule-category-${rule.id}`} className="sr-only">
+                                  Category
+                                </FieldLabel>
+                                <NativeSelect
+                                  id={`rule-category-${rule.id}`}
+                                  name="categoryId"
+                                  defaultValue={rule.categoryId}
+                                  className="w-full"
+                                >
+                                  {data.categories.map((category) => (
+                                    <NativeSelectOption key={category.id} value={category.id}>
+                                      {category.name}
+                                    </NativeSelectOption>
+                                  ))}
+                                </NativeSelect>
+                              </Field>
+                              <Button type="submit" variant="outline">
+                                Update rule
+                              </Button>
+                            </FieldGroup>
+                          </form>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 </section>

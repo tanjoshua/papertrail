@@ -8,6 +8,15 @@ import {
   PageHeader,
   SectionCard,
   StatementStatusBadge,
+  SummaryCard,
+  buttonLinkClassName,
+  chipClassName,
+  workspaceEyebrowClassName,
+  workspaceHeaderActionsClassName,
+  workspaceMetricGroupClassName,
+  workspacePageStackClassName,
+  workspaceSectionCopyClassName,
+  workspaceStatTextClassName,
 } from "@/app/(workspace)/_components/workspace-ui";
 
 type StatementsPageProps = {
@@ -22,17 +31,17 @@ export default async function StatementsPage({ searchParams }: StatementsPagePro
   const data = getStatementsPageData();
 
   return (
-    <div className="page-stack">
+    <div className={workspacePageStackClassName}>
       <PageHeader
         eyebrow="Statements"
         title="Statement history stays separate from month analysis."
         description="This page is for import provenance: which bank file came in, which cycle label was derived, how many rows were parsed, and which month pages the statement ended up feeding."
         actions={
-          <div className="header-actions">
-            <Link href="/upload" className="primary-button">
+          <div className={workspaceHeaderActionsClassName}>
+            <Link href="/upload" className={buttonLinkClassName({ variant: "outline" })}>
               Upload statement
             </Link>
-            <Link href="/" className="secondary-button">
+            <Link href="/" className={buttonLinkClassName({ variant: "outline" })}>
               Back to overview
             </Link>
           </div>
@@ -41,30 +50,27 @@ export default async function StatementsPage({ searchParams }: StatementsPagePro
 
       <MessageBanner message={message} />
 
-      <section className="summary-band">
-        <article className="summary-item">
-          <p className="eyebrow">Total statements</p>
-          <p className="summary-value">{data.summary.statementCount}</p>
-          <p className="summary-copy">Every imported or stored file stays visible here as its own record.</p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Parsed statements</p>
-          <p className="summary-value">{data.summary.importedStatementCount}</p>
-          <p className="summary-copy">These statements produced transactions that now power the month pages.</p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Stored for parser work</p>
-          <p className="summary-value">{data.summary.storedStatementCount}</p>
-          <p className="summary-copy">Unsupported layouts can still be saved without blocking the rest of the app.</p>
-        </article>
-
-        <article className="summary-item">
-          <p className="eyebrow">Pending review rows</p>
-          <p className="summary-value">{data.summary.pendingReviewCount}</p>
-          <p className="summary-copy">This count rolls up uncategorized rows across every statement in the workspace.</p>
-        </article>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          eyebrow="Total statements"
+          value={data.summary.statementCount}
+          description="Every imported or stored file stays visible here as its own record."
+        />
+        <SummaryCard
+          eyebrow="Parsed statements"
+          value={data.summary.importedStatementCount}
+          description="These statements produced transactions that now power the month pages."
+        />
+        <SummaryCard
+          eyebrow="Stored for parser work"
+          value={data.summary.storedStatementCount}
+          description="Unsupported layouts can still be saved without blocking the rest of the app."
+        />
+        <SummaryCard
+          eyebrow="Pending review rows"
+          value={data.summary.pendingReviewCount}
+          description="This count rolls up uncategorized rows across every statement in the workspace."
+        />
       </section>
 
       <SectionCard
@@ -73,58 +79,66 @@ export default async function StatementsPage({ searchParams }: StatementsPagePro
         description="Derived cycle labels help you recognize the statement as a file import, while the linked month chips show where its transactions actually landed."
       >
         {data.statements.length > 0 ? (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {data.statements.map((statement) => (
-              <article key={statement.id} className="statement-row statement-row-detailed">
-                <div className="space-y-3">
+              <article
+                key={statement.id}
+                className="flex flex-wrap items-start justify-between gap-6 rounded-[24px] border bg-card p-4 shadow-sm"
+              >
+                <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="font-semibold text-stone-900">
+                    <p className="font-semibold text-foreground">
                       {statement.bankName}
                       {statement.accountLabel ? ` / ${statement.accountLabel}` : ""}
                     </p>
                     <StatementStatusBadge status={statement.status} />
                   </div>
 
-                  <div className="space-y-1">
-                    <p className="section-copy">
+                  <div className="flex flex-col gap-1">
+                    <p className={workspaceSectionCopyClassName}>
                       Derived cycle label {formatMonthLabel(statement.cycleMonth)} / {statement.originalFileName}
                     </p>
-                    <p className="section-copy">
+                    <p className={workspaceSectionCopyClassName}>
                       {statement.firstPostedAt && statement.lastPostedAt
                         ? `Rows posted from ${statement.firstPostedAt} to ${statement.lastPostedAt}`
                         : "No parsed transactions in this statement yet."}
                     </p>
                   </div>
 
-                  <div className="chip-row">
+                  <div className="flex flex-wrap gap-3">
                     {statement.monthsTouched.length > 0 ? (
                       statement.monthsTouched.map((month) => (
-                        <Link key={month} href={`/months/${month}`} className="chip">
+                        <Link key={month} href={`/months/${month}`} className={chipClassName()}>
                           {formatMonthLabel(month)}
                         </Link>
                       ))
                     ) : (
-                      <span className="chip">Stored only</span>
+                      <span className={chipClassName()}>Stored only</span>
                     )}
                   </div>
 
-                  {statement.notes ? <p className="section-copy">{statement.notes}</p> : null}
+                    {statement.notes ? <p className={workspaceSectionCopyClassName}>{statement.notes}</p> : null}
 
-                  <DeleteStatementForm returnTo="/statements" statementId={statement.id} />
+                  <div className="flex flex-wrap gap-3">
+                    <Link href={`/statements/${statement.id}`} className={buttonLinkClassName({ size: "sm" })}>
+                      View transactions
+                    </Link>
+                    <DeleteStatementForm returnTo="/statements" statementId={statement.id} />
+                  </div>
                 </div>
 
-                <div className="statement-stats">
+                <div className={workspaceMetricGroupClassName}>
                   <div>
-                    <p className="eyebrow">Spend</p>
-                    <p className="font-semibold text-stone-900">{formatCurrency(statement.spendCents)}</p>
+                    <p className={workspaceEyebrowClassName}>Spend</p>
+                    <p className={workspaceStatTextClassName}>{formatCurrency(statement.spendCents)}</p>
                   </div>
                   <div>
-                    <p className="eyebrow">Transactions</p>
-                    <p className="font-semibold text-stone-900">{statement.transactionCount}</p>
+                    <p className={workspaceEyebrowClassName}>Transactions</p>
+                    <p className={workspaceStatTextClassName}>{statement.transactionCount}</p>
                   </div>
                   <div>
-                    <p className="eyebrow">Needs review</p>
-                    <p className="font-semibold text-stone-900">{statement.pendingCount}</p>
+                    <p className={workspaceEyebrowClassName}>Needs review</p>
+                    <p className={workspaceStatTextClassName}>{statement.pendingCount}</p>
                   </div>
                 </div>
               </article>
